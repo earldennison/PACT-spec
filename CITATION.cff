@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+title: "PACT: Positioned Adaptive Context Tree Specification"
+message: "If you use this specification in your work, please cite it as below."
+type: software
+authors:
+  - family-names: "Tan"
+    given-names: "Earl Dennison"
+version: "0.1.0"
+date-released: 2025-08-25
+license: Apache-2.0
+repository-code: "https://github.com/earldennison/PACT-spec"
+keywords:
+  - context engineering
+  - context management
+  - LLMs
+  - deterministic substrate
+  - specification
+  - memory management
