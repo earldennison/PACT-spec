@@ -7,12 +7,20 @@ Concise definitions of key PACT terms, with section references.
 - Cycle: One rebuild+commit iteration. Exactly one snapshot per cycle. See 03 – Lifecycle §2.
 - Snapshot: Byte-stable tree after TTL and sealing; pruning/compaction is optional. `@t0` MUST re‑serialize to provider bytes. See 05 – Snapshots §2.1.
 - Sealed (turn/core): A turn (`mt`) sealed from `^ah` into `^seq`. Its `mc@0` core is immutable. See 02 – Invariants §6.2, §6.4.
-- Active Head (`^ah`): Current, mutable turn (depth 0). See 01 – Architecture §1.2.
+**Active Head (`^ah`)** — Structural container for the in-progress turn. Exists exactly once per snapshot.
+Sealed into `^seq` at commit. Not inherently mutable.
+**Active Turn (`at`)** — Temporal scope of editability within the current cycle.
+Includes the `^ah` and any other nodes created during this cycle. Ends when commit seals the turn.
 - Turn (`mt`): Sealed conversational turn under `^seq`. Anchors exactly one `mc` (core) and may include pre/post `cb` children. See 01 – Architecture §2.
 - Core (`mc`): MessageContainer at `offset=0` inside a turn; the main message body. Exactly one per `mt`. See 02 – Invariants §4.2.
 - Content Block (`cb`): Leaf/content node (text/call/result/media, etc.) with optional `role` and `kind`. See 01 – Architecture §2.
 - Combinator: Selector relationship operators. Descendant (`A B`) matches any descendant; child (`A > B`) matches direct children only. See 04 – Selectors §3.3, §4.
-- Effective History: Rendered history computed from sealed turns plus any additional nodes added after sealing. PACT does not define any semantic override; rendering is structural. See 03 – Lifecycle §5.3.
+- Effective History: Rendered history computed from sealed turns plus any additions
+  (e.g., summaries, redactions, corrections) created after sealing. **PACT does not
+  define any semantic precedence or override among such additions**; rendering is
+  purely structural and deterministic. Higher-level interpretation (e.g., “use a
+  summary instead of originals”) is an implementation decision outside PACT
+  conformance. See 03 – Lifecycle §5.3.
 - Depth: Addressing sealed turns in `^seq` newest→oldest. `depth=1` is most recent. See 01 – Architecture §3.2.
 - Offset: Relative placement within a turn: `<0` pre, `0` core (`mc`), `>0` post. See 02 – Invariants §4.1.
 - Regions: Root children `^sys`, `^seq`, `^ah` under `^root`. See 02 – Invariants §2.

@@ -167,7 +167,10 @@ In `^seq`, depth counts newest→oldest.
 ### 6.4 Immutability
 Sealed cores (`mc @ offset=0`) MUST NOT be mutated. Snapshots are immutable records. Non‑core nodes (pre/post context, summaries, redactions, corrections, containers) MAY be added or removed in subsequent cycles, including attachments targeting sealed turns, via new nodes and lifecycle—never by mutating sealed bytes in place.
 
-## 7. Budgeting and Pruning
+## 7. Pruning (Optional)
+**Preface.** Pruning is **optional**. If pruning is disabled, an implementation remains conformant by
+skipping this section entirely. When pruning **is** implemented, it MUST follow the canonical order and
+determinism requirements below.
 ### 7.1 Order
 After TTL expiry, implementations MAY apply pruning or compaction policies. When pruning is applied, nodes MUST be pruned by `priority`, then age, then `id`.
 
@@ -178,6 +181,11 @@ Recent K turns, pinned nodes, and references SHOULD be protected.
 Given the same pre-state and the same declared pruning/compaction policies and limits, all conformant implementations MUST yield identical post-state. Determinism is judged on the resulting snapshot structure and serialized bytes.
 
 Note: How an implementation declares or configures policies (e.g., token, node, depth, region) is out of scope for this specification.
+
+### 7.4 Budgeting (Out of Scope)
+Budgeting strategies (e.g., token budgets, node/depth caps, heuristic scoring)
+are **non-normative**. This specification only defines the **order of pruning** when pruning is enabled.
+Runtime-specific budgeting MAY influence what gets pruned, but MUST NOT violate canonical order or other invariants.
 
 ## 8. Snapshots and Serialization
 ### 8.1 Atomic Commit

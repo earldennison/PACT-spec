@@ -1,0 +1,24 @@
+{
+  "selector": "@t-2,@t-5 ^seq .mt .cb[role='tool'][kind='json']",
+  "from": {"label":"@t-2"}, "to": {"label":"@t-5"},
+  "added_ids": [],
+  "removed_ids": [],
+  "changed": [
+    {
+      "id":"cb:tool:42",
+      "fields":["content_hash"],
+      "delta":{"content_hash":{"from":"aa..","to":"bb.."}},
+      "content_diff":{
+        "mode":"jsonpatch",
+        "mime":"application/json",
+        "summary":{"bytesNewer":104,"bytesOlder":68,"identical":false,"truncated":false},
+        "patch":[
+          {"op":"replace","path":"/plan/kyotoDays","value":3},
+          {"op":"add","path":"/plan/notes/-","value":"use HND"}
+        ]
+      }
+    }
+  ]
+}
+
+

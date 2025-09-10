@@ -2,6 +2,17 @@
 
 # 07 – Adoption and Compatibility
 
+### Annex — Budgeting Guidance (Non-Normative)
+Budgeting decides **when** to trigger pruning based on limits such as token count,
+node count, depth, or application heuristics. PACT does **not** standardize budgeting.
+When budgeting triggers pruning, conformant implementations MUST:
+- Apply TTL expiry first, then pruning.
+- Use canonical pruning order: **priority → age (`created_at_ns` asc) → id (lexicographic)**.
+- Preserve determinism: given identical inputs and policies, produce identical post-state and bytes.
+
+Examples of budgeting knobs (illustrative only): `max_tokens_per_region`, `max_nodes_per_turn`,
+`max_depth(^seq)`, `priority_bands`.
+
 ## 1. Purpose
 This section provides guidance on **adopting PACT**, ensuring compatibility across implementations,  
 and extending the model without breaking determinism or interoperability.
@@ -22,7 +33,7 @@ A minimal compliant PACT runtime MUST implement:
 Implementations MAY adopt features in layers:
 1. **Core structure** (tree + regions + turns).  
 2. **Lifecycle** (TTL, expiry, sealing).  
-3. **Optional pruning/compaction strategies** (informative; not required for conformance).  
+3. **Optional pruning/compaction** (non-normative budgeting; pruning is optional for conformance).  
 4. **Selectors & diffs** (debugging, inspection).  
 
 Each layer adds determinism and observability without invalidating earlier layers.

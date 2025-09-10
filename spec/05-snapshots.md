@@ -26,6 +26,16 @@ Snapshots are referenced as:
 - `@t-1` — previous snapshot  
 - `@cN` — absolute cycle number
 
+Range addressing across snapshots MUST be supported with inclusive semantics:
+
+- `@t-<start>..<end>` — inclusive range using double-dots
+- `@t-<start>:<end>` — inclusive range using a colon (interchangeable with `..`)
+
+Notes:
+
+- Negative indices are relative to the current snapshot: `@t-1` is the immediate previous snapshot, `@t-2` two cycles back, etc.
+- `..` and `:` MUST be treated as interchangeable range operators and produce identical results.
+
 ---
 
 ## 3. Export and Import
@@ -60,7 +70,7 @@ Diffs MUST return a JSON object with exactly these keys:
 Diff outputs MUST preserve canonical order of the newer snapshot (per [02 – Invariants §4.3](02-invariants.md)).
 
 ### 4.5 Rematerialization and ID Strategy
-Intra-`^ah` moves MAY appear as removed + added when implementations rematerialize nodes. Tools SHOULD optionally infer "moved" when content hashes match.
+Intra-active-turn moves MAY appear as removed + added when implementations rematerialize nodes. Tools SHOULD optionally infer "moved" when content hashes match.
 
 **Rationale**: Node IDs are stable within their lifetime, but implementations may rematerialize nodes during internal operations. Conformance is judged on snapshot consistency and rendered bytes, not on ID preservation across internal rebuilds.
 
@@ -91,6 +101,20 @@ Intra-`^ah` moves MAY appear as removed + added when implementations remateriali
 }
 ```
 
+### 5.3 Snapshot Range Addressing
+
+Selectors MAY reference multiple snapshots using ranges. For example:
+
+```
+ctx.select("@t-5..-1 ^ah .cb")
+```
+
+This MUST select across snapshots from `t-5` through `t-1` inclusive. The following is equivalent and MUST return identical results:
+
+```
+ctx.select("@t-5:-1 ^ah .cb")
+```
+
 ## 6. Conformance Checklist
 
 An implementation is conformant if:
@@ -98,13 +122,14 @@ An implementation is conformant if:
 1. Each cycle MUST produce exactly one snapshot.
 2. Snapshots MUST be byte-stable (identical input → identical bytes).
 3. Snapshots MUST be addressable (@t0, @t-1, @cN).
-4. Export MUST include all nodes, required metadata, and canonical order.
-5. Import MUST yield identical serialization output as original.
-6. Diff identity MUST be based on node `id`.
-7. Changes MUST be field-sensitive (detect header and content changes).
-8. Diff outputs MUST preserve canonical order per newer snapshot.
-9. Serialization MUST NOT mutate the snapshot (side-effect free).
-10. Remove+add patterns for intra-`^ah` changes are permitted for conformance.
-11. Tools SHOULD detect logical moves via content hash matching where possible.
+4. Snapshot range addressing (`@tA..B` and `@tA:B`) MUST be supported with inclusive semantics and both operators MUST be interchangeable.
+5. Export MUST include all nodes, required metadata, and canonical order.
+6. Import MUST yield identical serialization output as original.
+7. Diff identity MUST be based on node `id`.
+8. Changes MUST be field-sensitive (detect header and content changes).
+9. Diff outputs MUST preserve canonical order per newer snapshot.
+10. Serialization MUST NOT mutate the snapshot (side-effect free).
+11. Remove+add patterns for intra-active-turn changes are permitted for conformance.
+12. Tools SHOULD detect logical moves via content hash matching where possible.
 
 [← 04-selectors](04-selectors.md) | [↑ Spec Index](../README.md) | [→ 06-debugging](06-debugging.md)

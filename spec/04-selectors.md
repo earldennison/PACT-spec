@@ -16,8 +16,12 @@ Selectors MUST be deterministic and side-effect free.
 - An optional snapshot reference (`@t0`, `@t-1`, `@c42`).  
 
 ### 2.2 Output
-- An **ordered list of node IDs**.  
-- Nodes are returned in canonical sibling order (see [02 – Invariants](02-invariants.md) §4.3).
+- **Non-range** (single snapshot `@tN` / `@cN` / omitted ⇒ `@t0` / wildcard `@*`):  
+  `ctx.select` MUST return an **ordered list of node IDs** in canonical sibling order.
+- **Range present** (`@tA..@tB` or `@tA:@tB`):  
+  `ctx.select` MUST return a **RangeDiffLatestResult** (pairwise diffs, snapshots sorted DESC: newest→oldest).
+
+**Rationale.** Ranges imply evolution over time; the natural result is “what changed” rather than a flat union of IDs. This preserves stable, pre-existing behavior for non-range calls (including `@*`).
 
 ---
 
@@ -66,13 +70,41 @@ Implementations create attributes via node headers defined in [02 – Invariants
 
 ### 3.7 Snapshots
 Snapshots are addressable with `@t0` (current), `@t-1` (previous), `@cN` (absolute cycle), or `@*` (all).
-If omitted, the snapshot reference MUST default to `@t0`.
-Implementations MUST NOT require explicit `@t0` for queries against the current snapshot.
+If omitted, the snapshot reference MUST default to `@t0`. Implementations MUST NOT require explicit `@t0`.
+
+Range addressing across snapshots MUST be supported with **inclusive** semantics:
+- `@t-<start>..<end>` — inclusive range using double-dots  
+- `@t-<start>:<end>` — inclusive range using a colon (**interchangeable** with `..`)
+
+**Contract**
+- Presence of a SnapshotRange ⇒ return **RangeDiffLatestResult**.  
+- Otherwise ⇒ return **ordered list of IDs**.
+
+**Examples**
+```text
+# Non-range (IDs)
+ctx.select("@t0 ^seq .mt:depth(1) .mc > .cb[role='assistant']")
+→ ["cb:a1", "cb:a7", ...]
+
+# Range (RangeDiffLatestResult)
+ctx.select("@t-3..@t0 ^seq .mt .cb[nodeType='cb:summary']")
+→ {
+     "query": "@t-3..@t0 ^seq .mt .cb[nodeType='cb:summary']",
+     "snapshots": [ { "label":"@t0" }, { "label":"@t-1" }, { "label":"@t-2" }, { "label":"@t-3" } ],
+     "diffs": [
+       { "from":{"label":"@t0"}, "to":{"label":"@t-1"}, "added_ids":[], "removed_ids":["cb:sum:c101"], "changed":[] },
+       { "from":{"label":"@t-1"}, "to":{"label":"@t-2"}, "added_ids":["cb:sum:c102"], "removed_ids":[], "changed":[] },
+       { "from":{"label":"@t-2"}, "to":{"label":"@t-3"}, "added_ids":[], "removed_ids":[], "changed":[] }
+     ],
+     "mode": "pairwise"
+   }
+```
 
 ---
 
 ## 4. Grammar (EBNF)
 ```ebnf
+# SnapshotRange presence affects ONLY the return type (IDs vs RangeDiffLatestResult).
 Selector   ::= [Snapshot] Group { "," Group }
 Group      ::= Chain
 Chain      ::= Step { Combinator Step }
@@ -80,12 +112,14 @@ Step       ::= Simple
 Combinator ::= " " | ">"
 Simple     ::= [Root] [ID] [Type] [Attr*] [Pseudo*] | "*"
 
-Snapshot   ::= "@" ("t" [ "-" ] Digit+ | "c" Digit+ | "*" )
-Root       ::= "^" ("sys" | "seq" | "ah" | "root")
-ID         ::= "#" Identifier
-Type       ::= "." Identifier
-Attr       ::= "[" Key [Op Value] "]"
-Pseudo     ::= ":" Identifier [ "(" ValueList ")" ]
+Snapshot        ::= SnapshotAtom | SnapshotRange
+SnapshotAtom    ::= "@" ( "t" [ "-" ] Digit+ | "c" Digit+ | "*" )
+SnapshotRange   ::= SnapshotAtom ".." SnapshotAtom   # inclusive; ":" interchangeable with ".."
+Root            ::= "^" ("sys" | "seq" | "ah" | "root")
+ID              ::= "#" Identifier
+Type            ::= "." Identifier
+Attr            ::= "[" Key [Op Value] "]"
+Pseudo          ::= ":" Identifier [ "(" ValueList ")" ]
 
 ValueList  ::= Value { "," Value }
 Value      ::= Number | String | Identifier | Range
@@ -99,6 +133,86 @@ Letter     ::= "a".."z" | "A".."Z"
 Digit      ::= "0".."9"
 StringChar ::= [^"'] | "\\" ( '"' | "'" | "\\" )
 ```
+
+Constraints:
+- Endpoints MUST be the same kind: "@t..@t" or "@c..@c".
+- "@*" MUST NOT appear inside a range.
+- Range is inclusive of both endpoints.
+
+### Range Select Output — RangeDiffLatestResult (Normative)
+
+When a SnapshotRange is present, `ctx.select` returns:
+
+RangeDiffLatestResult {
+  "query": string,                      // original selector
+  "snapshots": SnapshotRef[],           // expanded & resolved, sorted DESC by cycle (newest→oldest)
+  "diffs": DiffBlock[],                 // pairwise steps: (s0→s1), (s1→s2), ...
+  "mode": "pairwise",                   // reserved for future (e.g., "nodewise","baseline")
+  "limits"?: { "maxSnapshots"?:number, "maxChangesPerSnapshot"?:number, "truncated"?:boolean },
+  "warnings"?: string[],
+  "errors"?: Array<{ "code":string, "message":string, "fatal":boolean }>
+}
+
+SnapshotRef { "kind":"t"|"c", "value":number, "label":string, "cycle":number }
+
+DiffBlock {
+  "from": SnapshotRef,                  // newer snapshot
+  "to":   SnapshotRef,                  // older snapshot
+  "added_ids":   string[],              // present in 'from' but not in 'to'
+  "removed_ids": string[],              // present in 'to'   but not in 'from'
+  "changed": Array<{
+    "id": string,
+    "fields": string[],                 // headers that differ (e.g., ["ttl","content_hash","parent","offset"])
+    "delta"?: Record<string,{ "from":any, "to":any }>,
+    "content_diff"?: {                  // present iff options.includeContent=true AND "content_hash" changed
+      "mode":"unified"|"jsonpatch"|"tokens",
+      "mime"?: string,
+      "summary": { "bytesNewer":number, "bytesOlder":number, "identical":boolean, "truncated":boolean },
+      "diff"?: string,
+      "patch"?: any,
+      "hunks"?: any[]
+    }
+  }>,
+  "stats"?: { "added":number, "removed":number, "changed":number }
+}
+
+Changed detection (headers)
+- A node is “changed” iff the same id is present in both snapshots of the pair and any tracked header differs
+  (e.g., ttl, priority, parent, offset, nodeType, role, kind, content_hash, created_at_ns, creation_index).
+  delta carries scalar old/new values. If content_hash changed and options.includeContent=true,
+  implementations SHOULD attach a content_diff.
+
+Ordering and determinism
+- snapshots sorted newest→oldest (DESC by cycle).
+- Within each DiffBlock, added_ids/removed_ids SHOULD be ordered by the canonical sibling order of the from snapshot,
+  then by id.
+- Deterministic: identical inputs produce identical outputs byte-for-byte.
+
+### ctx.select Options (applies when a SnapshotRange is present)
+
+Signature:
+  ctx.select(selector, options?)
+
+Options:
+- includeContent?: boolean
+  When true, and a node’s content_hash is in changed.fields, attach a content_diff to that changed item.
+
+- contentMode?: "unified"|"jsonpatch"|"tokens"
+  Default "unified". Controls the content_diff representation.
+
+- contextLines?: number
+  Unified diff context lines (default 3).
+
+- materialize?: ("content"|"mime"|"encoding"|"content_hash")[]
+  When present, servers MAY inline minimal fields needed to compute or validate diffs.
+
+- maxSnapshots?: number
+  Cap range expansion.
+
+- maxChangesPerSnapshot?: number
+  Cap size of each DiffBlock; set limits.truncated=true on truncation.
+
+Non-range calls ignore these options and continue to return IDs.
 
 ---
 
@@ -171,6 +285,12 @@ ctx.select("^seq .mt:depth(1,2,3) .cb[role='user']")
 # last three sealed turns (range form), all user messages
 ctx.select("^seq .mt:depth(1-3) .cb[role='user']")
 
+# last five sealed turns (range form)
+ctx.select("^seq .mt:depth(1-5)")
+
+# select across snapshot range t-5 through t-1 (inclusive)
+ctx.select("@t-5..-1 ^ah .cb")
+
 # find a specific node across all available snapshots
 ctx.select("@* #abc123def")
 
@@ -182,6 +302,14 @@ ctx.select("^seq .mt:depth(3)")
 ---
 
 ## 6.2 Canonical Selector Tests (Normative)
+
+#### Range (returns RangeDiffLatestResult)
+- MUST return `RangeDiffLatestResult` for any selector containing a SnapshotRange.
+- Snapshots MUST be sorted newest→oldest (DESC by cycle) in the `snapshots` array.
+- `diffs` MUST be pairwise: (s0→s1), (s1→s2), …
+
+#### Non-range (returns IDs)
+- MUST return ordered array of node IDs for single-snapshot or `@*` queries.
 
 Given this minimal snapshot fixture at `@t0`:
 
@@ -257,6 +385,14 @@ An implementation is conformant if:
 13. Numeric vs string attribute comparison rules MUST be followed.
 14. Data type detection for attributes MUST be implemented correctly.
 15. Default snapshot if omitted MUST be `@t0` (see §3.7); implementations MUST NOT require explicit `@t0` for current snapshot queries.
+16. Snapshot range addressing (`@tA..B` and `@tA:B`) MUST be supported with inclusive semantics and both operators MUST be interchangeable.
+
+- MUST parse SnapshotRange and reject mixed kinds ("@t..@c") or wildcard endpoints ("@*" in ranges).
+- MUST return RangeDiffLatestResult when a SnapshotRange is present in the selector.
+- MUST return a list of IDs when the selector targets a single snapshot or "@*".
+- MUST sort snapshots newest→oldest and compute pairwise diffs in that order.
+- MUST be deterministic (stable ordering and byte-identical outputs for identical inputs).
+- SHOULD expose limits and set truncated=true when caps are hit.
 
 ### 7.1 Golden Tests (Normative)
 

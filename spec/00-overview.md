@@ -48,8 +48,9 @@ PACT addresses this gap by formalizing the **structure of context itself**, inde
    A new snapshot of the tree is produced atomically each cycle.  
    Rendering is side-effect free: the same snapshot always produces identical **serialized context bytes** for the provider.
 
-5. **Budgeting & pruning**  
-   Resource limits (tokens, nodes, depth) are enforced deterministically: **TTL expiry → priority → age → id**.
+5. **Pruning (optional)**  
+   When enabled, pruning MUST be deterministic and apply **after TTL expiry**, using the canonical order **priority → age → id**.  
+   **Budgeting strategies** (token/node/depth limits, heuristics) are **non-normative** and out of scope; see *Annex — Budgeting Guidance*.
 
 6. **Selectors & snapshots**  
    PACT includes a CSS-like query language (`ctx.select`) to traverse both **space** (tree structure) and **time** (snapshots).  
@@ -61,7 +62,7 @@ PACT addresses this gap by formalizing the **structure of context itself**, inde
 
 The PACT specification defines:
 
-- **Invariants**: placement rules, ordering, lifecycle semantics, pruning policies.  
+- **Invariants**: placement rules, ordering, lifecycle, and **pruning order (optional)**.  
 - **Interfaces**: context selectors (`ctx.select`, `ctx.diff`) and snapshot semantics.  
 - **Schemas**: minimal required metadata for node headers and snapshots.  
 - **Provider mapping**: how the tree linearizes into provider-agnostic threads.  

@@ -24,6 +24,9 @@ This leads to:
 - Snapshots & diffs: stable replay + debugging,
 - Context Selectors: CSS-like traversal across space and time.
 
+- Active Turn (`at`) vs `^ah`: `at` governs editability during a cycle; `^ah` is structural only.
+- Snapshot addressing: `@t0`, `@t-1`, `@cN`; ranges (`..` or `:`) are inclusive and range selects return diffs.
+
 ---
 
 ## Spec
@@ -39,11 +42,10 @@ The normative specification lives in [`/spec`](./spec):
 - [06 – Debugging and Inspection](./spec/06-debugging.md)  
 - [07 – Adoption and Compatibility](./spec/07-adoption.md)  
 - [08 – Reference Implementations](./spec/08-reference-implementations.md)
-- [09 – Annex: Conformance Suite](./spec/09-annex-conformance.md)
+- [09 – Annex: Spec-wide Conformance Checklist](./spec/09-annex-conformance.md)
 - [10 – Annex: Glossary](./spec/10-annex-glossary.md)
  
-
-See [`spec/README.md`](./spec/README.md) for the full index.
+The list above serves as the spec index. For a single-file view, see [`PACT-Complete-Specification.md`](./PACT-Complete-Specification.md).
 
 ---
 
@@ -53,6 +55,7 @@ See [`spec/README.md`](./spec/README.md) for the full index.
 - [Comparisons](./docs/comparisons.md) — how PACT differs from MemGPT, Letta, Sculptor, etc.  
 - [Diagrams](./docs/diagrams.md) — Mermaid diagrams illustrating the model.  
 - [Spec Style Guide](./docs/spec-style.md) — format and tone rules for spec files.  
+- [Selector Examples](./docs/selector-examples.md) — query patterns across space/time.  
 
 ---
 

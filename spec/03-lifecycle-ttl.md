@@ -2,6 +2,18 @@
 
 # 03 – Lifecycle and TTL
 
+> **Terminology Clarifier — `^ah` vs `at`**  
+>
+> | Term | Nature | Meaning |  
+> |------|--------|---------|  
+> | **Active Head (`^ah`)** | Structural | The container node for the in-progress turn. Sealed → `mt` at commit. Not inherently mutable. |  
+> | **Active Turn (`at`)** | Temporal | The editable scope of the current cycle. Governs mutability across regions until sealing. |
+>
+> **Terminology Lint (non-normative)**  
+> When writing spec text, refer to **`^ah`** for structure and **`at`** for editability.  
+> Phrases like “`^ah` is editable/mutable” SHOULD be avoided; prefer  
+> “during the Active Turn (`at`), content is editable until sealing.”
+
 ## 1. Purpose
 This section defines the **temporal semantics** of PACT:
 - how cycles are defined,
@@ -69,11 +81,12 @@ Nodes with live references MUST NOT be removed (expired or pruned). If liveness 
 
 ## 5. Sealing & Snapshots
 ### 5.1 Active Head
-There MUST be at most one `^ah` per snapshot.  
-It represents the current, mutable turn.
+There MUST be at most one `^ah` node per snapshot. At commit, the `^ah` is sealed
+into history as a new `mt` under `^seq`. Once sealed, the `mc@0` core is immutable.
+`^ah` denotes **structure** only; it does not define what is editable.
 
 ### 5.2 Sealing & Snapshots
-At commit, the Active Head is sealed into history and a snapshot is emitted. Sealed turns and snapshots are immutable artifacts.
+At commit, the Active Head is sealed into history and a snapshot is emitted. Sealed turns and snapshots are immutable artifacts. Sealing affects mutability; `^ah` is a structural pointer, while mutability is temporal and applies to the Active Turn (`at`).
 
 ### 5.3 Effective History
 After sealing, implementations MAY add new nodes (e.g., summaries, redactions, corrections) anywhere permitted by placement rules. Implementations MUST NOT mutate sealed nodes; changes MUST be expressed by adding new referencing blocks. PACT does not define any semantic override among such nodes. Rendering remains purely structural and deterministic: nodes are serialized in canonical order; any higher-level interpretation (e.g., "use a summary instead of originals") is an implementation choice outside this specification. Conformance is judged solely on structural serialization; semantic use of additions (summaries, redactions, corrections) is out of scope.
@@ -84,13 +97,20 @@ Implementations MUST NOT advertise semantic precedence of summaries/corrections 
 Given the same prior snapshots and the same set of non‑expired additions, the effective history serializes to the same provider‑input bytes.
 
 ### 5.5 Edit Scope
-Everything in the Active Head is editable until sealing. Prior to commit, implementations MAY add/remove/re‑parent any node except `mt` and `^sys`, including across regions. After sealing, changes are expressed as new blocks with explicit references—not by mutating sealed content.
+**Active Turn (`at`)** — the *temporal edit scope* of the current cycle.
+
+- Begins at cycle start and ends at commit.  
+- All nodes created during the cycle (in `^ah` or other regions) are editable until sealing.  
+- After sealing, further modifications MUST be expressed as new nodes, never by mutating sealed bytes.
+
+This clarifies that editability is governed by `at`, while `^ah` is merely the structural container
+of the turn that will be sealed.
 
  
 
 ## 6. Attempts & Controls
 ### 6.1 Stop/Edit/Re‑Run
-Within a cycle, provider calls produce attempts recorded in telemetry with statuses: running, completed, canceled, error. Attempts are not part of history. If a user stops an attempt, the Active Head remains editable; the system may modify or replace content and re‑run the provider. Only upon commit is the turn sealed into ^seq and a snapshot emitted. Earlier attempts remain visible to operators for observability and audit in the control plane, but do not affect sealed history or snapshots.
+Within a cycle, provider calls produce attempts recorded in telemetry with statuses: running, completed, canceled, error. Attempts are not part of history. If a user stops an attempt, content within the Active Turn remains editable; the system may modify or replace content and re‑run the provider. Only upon commit is the turn sealed into ^seq and a snapshot emitted. Earlier attempts remain visible to operators for observability and audit in the control plane, but do not affect sealed history or snapshots.
 
 ### 6.2 Attempt Record Schema
 Attempt records MUST include: `attempt_id`, `cycle_id`, `status`, `started_at`, `ended_at`, `provider`, `model`, `params(hash)`, `token_in`, `token_out`, `error(optional)`.

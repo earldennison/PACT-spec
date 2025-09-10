@@ -1,0 +1,29 @@
+{
+  "selector": "@t-3..@t0 ^seq .mt[id='mt:c121'] .mc > .cb[role='assistant'][kind='text']",
+  "snapshots": [{"label":"@t0"},{"label":"@t-1"},{"label":"@t-2"},{"label":"@t-3"}],
+  "diffs": [
+    {
+      "from":{"label":"@t0"}, "to":{"label":"@t-1"},
+      "added_ids":[], "removed_ids":[],
+      "changed":[
+        {
+          "id":"cb:a:c121",
+          "fields":["content_hash"],
+          "delta":{"content_hash":{"from":"6aa1...9c","to":"9aa1...0d"}},
+          "content_diff":{
+            "mode":"unified",
+            "mime":"text/plain",
+            "summary":{"bytesNewer":128,"bytesOlder":119,"identical":false,"truncated":false},
+            "diff":"--- older(@t-1)/cb:a:c121\n+++ newer(@t0)/cb:a:c121\n@@\n-2 days in Kyoto\n+3 days in Kyoto\n"
+          }
+        }
+      ]
+    },
+    { "from":{"label":"@t-1"}, "to":{"label":"@t-2"}, "added_ids":["cb:a:new"], "removed_ids":[], "changed":[] },
+    { "from":{"label":"@t-2"}, "to":{"label":"@t-3"}, "added_ids":[], "removed_ids":["cb:a:old"], "changed":[] }
+  ]
+}
+
+
+
+

@@ -1,0 +1,32 @@
+{
+  "selector": "@t-4..@t-6 ^seq .mt .cb[kind='text']",
+  "snapshots":[{"label":"@t-4"},{"label":"@t-5"},{"label":"@t-6"}],
+  "diffs":[
+    {
+      "from":{"label":"@t-4"}, "to":{"label":"@t-5"},
+      "added_ids":[], "removed_ids":[],
+      "changed":[
+        {
+          "id":"cb:text:9",
+          "fields":["content_hash"],
+          "delta":{"content_hash":{"from":"x","to":"y"}},
+          "content_diff":{
+            "mode":"tokens",
+            "mime":"text/plain",
+            "tokenizer":"word",
+            "summary":{"tokensNewer":11,"tokensOlder":10,"identical":false,"truncated":false},
+            "hunks":[
+              {
+                "from":{"start":0,"end":11},
+                "to":{"start":0,"end":12},
+                "ops":[ {"op":"keep","count":3}, {"op":"rep","del":1,"ins":["Tokyo","(HND)"]} ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+

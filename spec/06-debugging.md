@@ -125,7 +125,7 @@ Snapshots are byte-stable: given the same input, serialization is identical.
 
 Selectors are pure: repeated queries yield the same results.
 
-Diffs are complete: all changes are attributable to TTL, pruning, or mutation in the Active Head.
+Diffs are complete: all changes are attributable to TTL, pruning, or mutation during the Active Turn.
 
 Debugging is structural: the same invariants apply regardless of LLM stochasticity.
 
@@ -146,5 +146,12 @@ Replay of snapshots yields identical serialization.
 No serialization path mutates the tree.
 
 Debugging and diffs are deterministic across runs.
+
+### Errors specific to Snapshot Ranges
+
+- E_SNAPSHOT_RANGE_KIND_MISMATCH — mixed "@t..@c" endpoints are invalid.
+- E_SNAPSHOT_RANGE_WILDCARD — "@*" is not allowed inside a range.
+- E_SNAPSHOT_RANGE_LIMIT — expanded snapshots exceed maxSnapshots.
+- E_SELECTOR_INVALID — malformed selector or grammar violation.
 
 [← 05-snapshots](05-snapshots.md) | [↑ Spec Index](../README.md) | [→ 07-adoption](07-adoption.md)

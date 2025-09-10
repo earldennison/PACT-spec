@@ -30,9 +30,10 @@ The root has three required children (regions):
   Sequence of **sealed turns** (`mt`).  
   Turns are appended in order; once sealed, their **core** is immutable.
 
-- **`^ah` — Active Head**  
-  The current, in‑progress turn (depth 0).  
-  Mutable until sealed into `^seq`. At most one active head exists per snapshot.
+- **`^ah` — Active Head (structural container)**  
+  Holds the current in-progress turn that will be sealed into `^seq` at commit.  
+  ⚠️ **Note:** Mutability is **not** a property of `^ah` itself. Editability during the cycle is governed
+  by the **Active Turn (`at`)** (see 03 – Lifecycle §5.5). Only at commit is `^ah` sealed into `^seq` as a new `mt`.
 
 ---
 
@@ -118,7 +119,7 @@ mt (MessageTurn)
 ^root
 ├─ ^sys (System Header)
 ├─ ^seq (Sealed sequence of turns)
-└─ ^ah (Active head: current, mutable turn)
+└─ ^ah (Active head: current unsealed turn)
 ---
 
 ## 7. Commit Model
@@ -129,5 +130,4 @@ mt (MessageTurn)
 
 ---
 
-## Next
 - [02 – Invariants](02-invariants.md): placement, ordering, lifecycle, pruning, commit rules.
