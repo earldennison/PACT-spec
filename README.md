@@ -17,7 +17,7 @@ This leads to:
 
 **PACT treats structure as a first-class concept**:
 - Regions: `^sys` (system header), `^seq` (historical turns), `^ah` (active head),
-- Canonical node types: `mt`, `mc`, `cb`,
+- Canonical node types: `seg`, `cont`, `block`,
 - Deterministic ordering: offset → created_at_ns → creation_index → id,
 - Lifecycle: cycles, TTL, sealing, cascading cleanup,
 - Budgeting & pruning: reproducible resource enforcement,

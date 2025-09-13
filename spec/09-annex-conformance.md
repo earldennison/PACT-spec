@@ -12,7 +12,7 @@ MUST (mark one):
 - [ ] Yes  [ ] No — Regions `^sys`, `^seq`, `^ah` exist under `^root`.
 - [ ] Yes  [ ] No — Mutability is anchored to **Active Turn (`at`)**; `^ah` is structural only (no text implies inherent mutability for `^ah`).
 - [ ] Yes  [ ] No — Nodes have required headers (`id`, `nodeType`, `offset`, `ttl`, `priority`, `cycle`, `created_at_ns`, `created_at_iso`, `creation_index`).
-- [ ] Yes  [ ] No — Each `mt` has exactly one `mc @ offset=0`.
+- [ ] Yes  [ ] No — Each `seg` has exactly one `cont @ offset=0`.
 - [ ] Yes  [ ] No — Canonical sibling order enforced: `offset` → `created_at_ns` → `creation_index` → `id`.
 - [ ] Yes  [ ] No — TTL expiry + cascade at commit; sealed cores immutable; snapshots immutable.
 - [ ] Yes  [ ] No — If pruning is implemented, it is deterministic (**priority → age → id**).
@@ -30,7 +30,7 @@ Reference: 02 – Invariants §§2–9, §11.
 
 MUST (mark one):
 - [ ] Yes  [ ] No — Are roots `^sys`, `^seq`, `^ah`, `^root` supported?
-- [ ] Yes  [ ] No — Are types `.mt`, `.mc`, `.cb` supported, and do `.cb:summary` and `[nodeType='cb'][kind='summary']` return identical results?
+- [ ] Yes  [ ] No — Are types `.seg`, `.cont`, `.block` supported, and do `.block:summary` and `[nodeType='block'][kind='summary']` return identical results?
 - [ ] Yes  [ ] No — Do ID selectors `#<id>` match exactly (case‑sensitive)?
 - [ ] Yes  [ ] No — Are pseudos `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)` implemented, including `:depth(n1,n2,...)` lists and `:depth(n1-n2)` ranges?
 - [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [role] [kind]` supported with `= != < <= > >=` and correct numeric/string semantics?
@@ -88,7 +88,7 @@ At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compacti
 To claim compliance with Region Alias Equivalence, an implementation MUST:
 
 1) Accept `depth(0)` wherever `^ah` is accepted and produce identical selections.  
-2) Accept `.mt:depth(n)` for any historical turn `n ≥ 1` wherever `^seq` addressing is used.  
+2) Accept `.seg:depth(n)` for any historical segment `n ≥ 1` wherever `^seq` addressing is used.  
 3) Accept `depth(-1)` wherever `^sys` is accepted (subject to authorization).  
 4) Provide a conformance test that round-trips alias ↔ depth forms with identical results.
 
@@ -98,11 +98,11 @@ To claim compliance with Region Alias Equivalence, an implementation MUST:
 
 ### Lifecycle — MUST
 1) Active Turn permits arbitrary edits (add/remove/re-parent/replace) within invariants.  
-2) Commit produces a new `.mt:depth(1)`; prior `.mt:depth(k)` shift to `k+1`.  
-3) `mc[offset=0]` bytes are immutable after commit.
+2) Commit produces a new `.seg:depth(1)`; prior `.seg:depth(k)` shift to `k+1`.  
+3) `cont[offset=0]` bytes are immutable after commit.
 
 ### Selectors — MUST
-1) Depth qualifier `.mt:depth(n)` and standalone `depth(n)` are supported.  
+1) Depth qualifier `.seg:depth(n)` and standalone `depth(n)` are supported.  
 2) SnapshotRange yields `RangeDiffLatestResult` by default.  
 3) No alternate “legacy” result shapes are required or recognized pre‑v1.
 

@@ -1,11 +1,11 @@
 {
-  "selector": "@t-1,@t-5 ^seq .mt .cb[role='assistant']",
+  "selector": "@t-1,@t-5 ^seq .seg .block[role='assistant']",
   "from": {"label":"@t-1","cycle":204},
   "to":   {"label":"@t-5","cycle":200},
-  "added_ids": ["cb:a9","cb:a12"],
-  "removed_ids": ["cb:a2"],
+  "added_ids": ["block:a9","block:a12"],
+  "removed_ids": ["block:a2"],
   "changed": [
-    { "id":"cb:a7", "fields":["content_hash"], "delta":{"content_hash":{"from":"4d8f...a2","to":"9aa1...0d"}} }
+    { "id":"block:a7", "fields":["content_hash"], "delta":{"content_hash":{"from":"4d8f...a2","to":"9aa1...0d"}} }
   ],
   "stats": {"added":2,"removed":1,"changed":1}
 }

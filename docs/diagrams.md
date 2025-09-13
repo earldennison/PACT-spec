@@ -25,14 +25,14 @@ graph TD
 ```mermaid
 graph TD
   mt(mt: MessageTurn)
-  pre(cb: pre-context)
-  mc(mc: core container)
-  post(cb: post-context)
+  pre(block: pre-context)
+  cont(cont: core container)
+  post(block: post-context)
 
   mt --> pre
-  mt --> mc
+  mt --> cont
   mt --> post
-  mc --> core(cb: core content)
+  cont --> core(block: core content)
 ```
 ---
 ## 3. Lifecycle Flow
@@ -55,7 +55,7 @@ sequenceDiagram
 ## 4. Selector Traversal
 ```mermaid
 graph LR
-  selector["ctx.select(^seq .mt:depth(1) .cb[role=assistant])"]
+  selector["ctx.select(^seq .seg:depth(1) .block[role=assistant])"]
   snapshot["@t0 snapshot"]
   nodes{{Matched nodes}}
 

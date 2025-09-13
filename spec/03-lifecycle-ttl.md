@@ -6,7 +6,7 @@
 >
 > | Term | Nature | Meaning |  
 > |------|--------|---------|  
-> | **Active Head (`^ah`)** | Structural | The container node for the in-progress turn. On commit, ^ah becomes an mt under ^seq. Structural only; mutability is governed by the Active Turn (`at`). During `at`, nodes under depth(0) are editable subject to invariants. |  
+> | **Active Head (`^ah`)** | Structural | The container node for the in-progress segment. On commit, ^ah becomes a seg under ^seq. Structural only; mutability is governed by the Active Turn (`at`). During `at`, nodes under depth(0) are editable subject to invariants. |  
 > | **Active Turn (`at`)** | Temporal | The editable scope of the current cycle. Governs mutability across regions until sealing. |
 >
 > **Terminology Lint (non-normative)**  
@@ -123,7 +123,7 @@ Nodes with live references MUST NOT be removed (expired or pruned). If liveness 
 ## 5. Sealing & Snapshots
 ### 5.1 Active Head
 There MUST be at most one `^ah` node per snapshot. At commit, the `^ah` is sealed
-into history as a new `mt` under `^seq`. Once sealed, the `mc[offset=0]` core is immutable.
+into history as a new `seg` under `^seq`. Once sealed, the `cont[offset=0]` core is immutable.
 `^ah` denotes **structure** only; it does not define what is editable.
 
 ### 5.2 Sealing & Snapshots
@@ -161,11 +161,11 @@ of the turn that will be sealed.
 ### Commit (Sealing)
 - No sealing occurs during the Active Turn. Sealing occurs only at the commit boundary.
 - On commit:
-  1) `depth(0)` materializes as a new `.mt:depth(1)` in `^seq` with `mc[offset=0]` bytes fixed (immutable).
-  2) All existing `.mt:depth(k)` shift to `.mt:depth(k+1)`.
+  1) `depth(0)` materializes as a new `.seg:depth(1)` in `^seq` with `cont[offset=0]` bytes fixed (immutable).
+  2) All existing `.seg:depth(k)` shift to `.seg:depth(k+1)`.
 
 ### Immutability
-- After commit, an `mt`’s `mc[offset=0]` bytes MUST NOT be mutated. Later changes are expressed via new nodes (e.g., overlays, redactions, summaries), not by in-place mutation of sealed bytes.
+- After commit, a `seg`’s `cont[offset=0]` bytes MUST NOT be mutated. Later changes are expressed via new nodes (e.g., overlays, redactions, summaries), not by in-place mutation of sealed bytes.
 
 ## 6. Attempts & Controls
 ### 6.1 Stop/Edit/Re‑Run
@@ -184,7 +184,7 @@ At commit, lifecycle MUST be applied in this sequence:
 2. **Pruning/Compaction (if any)**  
    Apply pruning or compaction policies if configured (see [02 – Invariants](02-invariants.md), §7).  
 3. **Sealing**  
-   Seal the Active Head into `^seq` as a new `mt`.  
+   Seal the Active Head into `^seq` as a new `seg`.  
    Create a fresh `^ah` for the next cycle.
 4. **Snapshot Commit**  
    Produce a stable snapshot (`@t0`).  
@@ -206,29 +206,29 @@ Implementations MAY rebuild the current turn each cycle by adding new summarizat
 ### 8.1 TTL Expiry
 
 Cycle 10:
-├─ cb (ttl=0) ← expires at commit
-├─ cb (ttl=2) ← survives until cycle 12
-└─ cb (ttl=None) ← persistent
+├─ block (ttl=0) ← expires at commit
+├─ block (ttl=2) ← survives until cycle 12
+└─ block (ttl=None) ← persistent
 
 
 
 ### 8.2 Cascade Cleanup
-mt
-└─ mc
-└─ cb (ttl=0)
+seg
+└─ cont
+└─ block (ttl=0)
 
-→ At commit, cb expires.
-→ mc is now empty; if marked removable, mc is removed too.
-→ mt remains, with empty mc.
+→ At commit, block expires.
+→ cont is now empty; if marked removable, cont is removed too.
+→ seg remains, with empty cont.
 
 ### 8.3 Sealing
 ^ah
-├─ mc (offset=0)
-│ └─ cb (role="user")
-└─ cb (offset=+1, role="tool")
+├─ cont (offset=0)
+│ └─ block (role="user")
+└─ block (offset=+1, role="tool")
 
-→ At commit, ^ah is sealed into ^seq as new mt.
-→ mc core is immutable from this point onward.
+→ At commit, ^ah is sealed into ^seq as new seg.
+→ cont core is immutable from this point onward.
 → If any removable containers become empty due to TTL expiry, they are removed in this commit (see 02 – Invariants §5.3.1).
 ---
 
@@ -237,7 +237,7 @@ mt
 Key `K` emits a fresh instance each episode and expires immediately after sealing:
 
 Cycle t:
-^ah  └─ cb[key="K", ttl=1]
+^ah  └─ block[key="K", ttl=1]
 
 Commit t→t+1:
 - Newest becomes `depth=1` (sealed)
@@ -250,13 +250,7 @@ Key `K` materializes at t0, t3, t6, … and never expires via TTL:
 
 - On a firing episode, create a new instance at `depth=0` that seals to `depth=1` at commit.
 - Prior copies remain and drift deeper (`2,3,…`).
-- Selecting the newest sealed instance: `^seq .mt:depth(1) .cb[key='K']`.
+- Selecting the newest sealed instance: `^seq .seg:depth(1) .block[key='K']`.
 ## 9. Edge Cases & Policy
 
-- System mutability: Writes to `depth < 0` are policy‑gated and SHOULD emit audit events.
-- History surgery at scale: Prefer logical splices via indirection indexes; avoid physical renumbering of depths.
-- TTL at negative depths: Default `ttl = null`; finite TTL MAY be allowed for experimental/runtime hints.
-- AH phases: Phases remain as subslots of `depth = 0` (e.g., `:pre / :core / :post`); do not introduce new depths for phases.
-
-
-[← 02-invariants](02-invariants.md) | [↑ Spec Index](../README.md) | [→ 04-selectors](04-selectors.md)
+- System mutability: Writes to `depth < 0`

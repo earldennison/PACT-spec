@@ -116,13 +116,13 @@ Intra-active-turn moves MAY appear as removed + added when implementations remat
 Selectors MAY reference multiple snapshots using ranges. For example:
 
 ```
-ctx.select("@t-5:@t-1 ^ah .cb")
+ctx.select("@t-5:@t-1 ^ah .block")
 ```
 
 This MUST select across snapshots from `t-5` through `t-1` inclusive and return a RangeDiffLatestResult (see Selectors §3.7.1). The following is equivalent and MUST return identical results:
 
 ```
-ctx.select("@t-5:@t-1 ^ah .cb")
+ctx.select("@t-5:@t-1 ^ah .block")
 ```
 
 ## 6. Mutations (Aligned with Universal Depth)

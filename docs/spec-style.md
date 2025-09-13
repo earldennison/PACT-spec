@@ -11,9 +11,16 @@
 - Provide short conformance checklists per chapter.
 
 ## Formatting
-- Use backticks for code-like terms (`^sys`, `mt`, `offset`).
+- Use backticks for code-like terms (`^sys`, `seg`, `cont`, `block`, `offset`).
 - Use fenced code blocks for examples.
 - Keep examples minimal and self-contained.
+
+## Selector Formatting (SPA order)
+- Canonical order: `@time  (position)  { attributes }  [ behavior ]  @controls`.
+- Normalize attribute order: `key, id, type, kind, role, tag, schema, mime, lang`.
+- Normalize behavior order: `ttl, cad, phase, age, born_turn`.
+- Single-hop MAY be parenless only if previously agreed; otherwise use parentheses for multi-hop.
+- Attach hop-scoped `{…}` with no preceding space; global `{…}`/`[ … ]` preceded by a single space.
 
 ## Versioning
 - Reference current spec version from `VERSION` file.

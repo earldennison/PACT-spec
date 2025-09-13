@@ -60,7 +60,7 @@ Given a fixed snapshot and selector, the result MUST always be the same list of 
 ### 3.2 Supported Features
 Selectors MUST support:
 - Roots: `^sys`, `^seq`, `^ah`, `^root`  
-- Types: `.mt`, `.mc`, `.cb`  
+- Types: `.seg`, `.cont`, `.block`  
 - IDs: `#<id>`  
 - Pseudos: `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)`  
 - Attributes: `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [role] [kind]`  
@@ -70,13 +70,13 @@ Selectors MUST support:
 Examples:
 ```text
 # all pre-context blocks in active head
-ctx.select("^ah :pre .cb")
+ctx.select("^ah :pre .block")
 
-# last two historical turns, assistant responses only
-ctx.select("^seq .mt:depth(1,2) .cb[role='assistant']")
+# last two historical segments, assistant responses only
+ctx.select("^seq .seg:depth(1,2) .block[role='assistant']")
 
 # expired or soon-to-expire nodes
-ctx.select("^root .cb[ttl<=1]")
+ctx.select("^root .block[ttl<=1]")
 ```
 
 ---

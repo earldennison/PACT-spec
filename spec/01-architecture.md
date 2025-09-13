@@ -43,7 +43,7 @@ The root has three required children (regions):
 PACT components are inherently **spatiotemporal**. Implementations MUST support these primitives:
 
 - **Identity** — opaque stable `id` per node (see §5 and 02 – Invariants §3)
-- **Payload** — the content-bearing body (primarily in `.cb` under `.mc[offset=0]`)
+- **Payload** — the content-bearing body (primarily in `.block` under `.cont[offset=0]`)
 - **Depth** — universal placement along the commit axis (see §3.2 UD)
 - **Offset** — relative placement within a turn: `<0` pre, `0` core, `>0` post
 - **Cadence** — positive integer materialization frequency per episode (renamed from “cycle” field for refresh intervals)
@@ -74,15 +74,15 @@ Notes:
 
 PACT defines **three canonical node types** for interoperability and selectors:
 
-- **`mt` (MessageTurn)**  
-  A historical turn under `^seq`.  
-  Anchors exactly one `mc` (core) and may contain pre/post content blocks.
+- **`seg` (Segment)**  
+  A structural segment under `^seq`.  
+  Anchors exactly one `cont` (core) and may contain pre/post blocks.
 
-- **`mc` (MessageContainer)**  
-  The **core container** within a turn. Canonical placement is defined in [02 – Invariants §4.2](02-invariants.md).  
+- **`cont` (Container)**  
+  The **core container** within a segment/turn. Canonical placement is defined in [02 – Invariants §4.2](02-invariants.md).  
   Holds the central message content (e.g., user request or provider reply).
 
-- **`cb` (ContentBlock)**  
+- **`block` (Block)**  
   Leaf/content node: text, tool call, tool result, media, document, etc.  
   Provider‑agnostic. SHOULD carry attributes for interoperability:
   - `role`: `"user" | "assistant" | "tool" | "system" | "other"`
@@ -92,19 +92,19 @@ PACT defines **three canonical node types** for interoperability and selectors:
 Implementations and developers MAY define additional **user‑assigned node types** to express domain semantics.
 
 - **Namespace required** to avoid collisions, e.g.:
-  - `cb:summary`, `cb:sql_query`, `cb:image_caption`, `custom:note`
+  - `block:summary`, `block:sql_query`, `block:image_caption`, `custom:note`
 - **Selectors**:
-  - Broad match via `.cb`
-  - Specific match via `[nodeType="cb"][kind="summary"]` (or any user-defined value)
-- **Requirement**: The canonical mapping MUST remain available so cross‑implementation queries like `.cb` still work.
+  - Broad match via `.block`
+  - Specific match via `[nodeType="block"][kind="summary"]` (or any user-defined value)
+- **Requirement**: The canonical mapping MUST remain available so cross‑implementation queries like `.block` still work.
 
-> PACT v0.1 has **no overlay primitive**. “Overlay‑like” annotations (summaries, corrections, redactions) are represented as `cb` nodes (e.g., `nodeType="cb", kind="summary"`) typically placed in **post‑context**.
+> PACT v0.1 has **no overlay primitive**. “Overlay‑like” annotations (summaries, corrections, redactions) are represented as `block` nodes (e.g., `nodeType="block", kind="summary"`) typically placed in **post‑context**.
 
 ---
 
 ## 3. Placement within Components
 ### 3.1 Canonical Offsets (at every container boundary)
-Offsets apply at every container boundary (turns, containers, groups):
+Offsets apply at every container boundary (segments, containers, groups):
 
 - `offset < 0` → pre‑context
 - `offset = 0` → core container (exactly one at `offset=0`; multiple cores are invalid)
@@ -141,13 +141,13 @@ This nested invariance ensures a uniform ternary structure across the tree.
 ### 3.4 Region Aliases (Normative)
 The following aliases are pure syntactic sugar over depth (also see 04 – Selectors):
 
-- `^sys` ≡ `.mt:depth(-1)`
-- `^ah`  ≡ `.mt:depth(0)`
-- `^seq` ≡ the set `{ .mt:depth(n) | n ≥ 1 }`
+- `^sys` ≡ `.seg:depth(-1)`
+- `^ah`  ≡ `.seg:depth(0)`
+- `^seq` ≡ the set `{ .seg:depth(n) | n ≥ 1 }`
 
 ### 3.5 Alias≡Depth Equivalence Law (Normative)
 
-For any selector `S`, replacing `^ah` → `depth(0)`, `^sys` → `depth(-1)`, and any `^seq` specific reference → `.mt:depth(n)` for some `n ≥ 1` MUST select the identical node(s). Implementations MUST validate this equivalence.
+For any selector `S`, replacing `^ah` → `depth(0)`, `^sys` → `depth(-1)`, and any `^seq` specific reference → `.seg:depth(n)` for some `n ≥ 1` MUST select the identical node(s). Implementations MUST validate this equivalence.
 
 ### 3.6 Permissions Note
 
@@ -183,7 +183,7 @@ Canonical sibling ordering is defined normatively in [02 – Invariants §4.3](0
 Every node MUST carry at least:
 
 - `id` — opaque stable identifier (hash or UUID, impl‑defined)
-- `nodeType` — canonical or user‑assigned type (e.g., `cb`, `cb:summary`)
+- `nodeType` — canonical or user‑assigned type (e.g., `block`, `block:summary`)
 - `offset` — integer (relative placement)
 - `ttl` — `None | 0 | N` (cycles)
 - `priority` — integer (for pruning order)
@@ -196,25 +196,25 @@ Every node MUST carry at least:
 
 ## 6. Structural Patterns
 
-### 6.1 Turn pattern
+### 6.1 Segment pattern
 
 
-mt (MessageTurn)
-├─ cb (offset <0) ← pre-context
-├─ mc (offset =0) ← core container
-│ └─ cb ← core content
-└─ cb (offset >0) ← post-context
+seg (Segment)
+├─ block (offset <0) ← pre-context
+├─ cont (offset =0) ← core container
+│ └─ block ← core content
+└─ block (offset >0) ← post-context
 
 ### 6.2 Root layout
 ^root
 ├─ ^sys (System Header)
 ├─ ^seq (Sealed sequence of turns)
-└─ ^ah (Active head: current unsealed turn)
+└─ ^ah (Active head: current unsealed segment)
 ---
 
 ## 7. Commit Model
 
-- At each cycle’s end, the Active Head (`^ah`) is **sealed** into a new `mt` under `^seq`.  
+- At each cycle’s end, the Active Head (`^ah`) is **sealed** into a new `seg` under `^seq`.  
 - A fresh Active Head is created for the next cycle.  
 - A **snapshot** is produced at commit; rendering has no side effects: same snapshot → identical provider‑thread bytes.
 

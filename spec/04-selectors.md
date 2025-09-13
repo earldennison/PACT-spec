@@ -23,6 +23,18 @@ Selectors MUST be deterministic and side-effect free.
 
 **Rationale.** Ranges imply evolution over time; the natural result is “what changed” rather than a flat union of IDs. This preserves stable, pre-existing behavior for non-range calls (including `@*`).
 
+### 2.5 Canonical Selector Shape (Normative)
+
+Canonical order for selectors:
+
+```
+@time  (position)  { attributes }  [ behavior ]  @controls
+```
+
+- Omit `@time` ⇒ Working State (live Active Head). Use `@tK` for snapshots or ranges, and `@history` for `@t0..@t-*`.
+- Position uses hops inside parentheses. Single-hop shorthand MAY be allowed in implementations that previously shipped it; canonical remains parenthesized.
+- Insertion sentinel is a trailing comma in position; sugars: `end`, `+N` (after child N), `-N` (before child N).
+
 ---
 
 ## 3. Syntax Elements
@@ -33,15 +45,16 @@ Selectors MUST be deterministic and side-effect free.
 - `^root` — Root container
 
 ### 3.2 Types
-- `.mt` — MessageTurn  
-- `.mc` — MessageContainer  
-- `.cb` — ContentBlock  
-- Namespaced user-assigned types MUST also be supported. A type token like `.cb:summary` MUST match nodes whose `nodeType` equals `"cb"` and whose `kind` equals `"summary"`.
-- Equivalence (Normative): `.cb:summary` and `[nodeType='cb'][kind='summary']` MUST be treated as equivalent forms and MUST return identical results.
-- `kind` is not a type; query it via attributes (e.g., `.cb[kind='tool_call']`). Bare `.tool_call` is not standardized and MUST NOT be required for conformance.
+- `.seg` — Segment  
+- `.cont` — Container  
+- `.block` — Block  
+- Namespaced user-assigned types MUST also be supported. A type token like `.block:summary` MUST match nodes whose `nodeType` equals "block" and whose `kind` equals "summary".
+- Equivalence (Normative): `.block:summary` and `[nodeType='block'][kind='summary']` MUST be treated as equivalent forms and MUST return identical results.
+- `kind` is not a type; query it via attributes (e.g., `.block[kind='tool_call']`). Bare `.tool_call` is not standardized and MUST NOT be required for conformance.
 
-### 3.3 IDs
-- `#<id>` — select by node ID (opaque string)
+### 3.3 Keys and IDs
+- `#<key>` — shorthand for `{ key="…" }` (NEVER id)
+- `{ id="…" }` — select by node ID (opaque string)
 
 ### 3.4 Pseudo-classes and Depth Qualifier
 - `:pre` — nodes with `offset < 0`  
@@ -65,18 +78,18 @@ Region Aliases (Normative, pure sugar):
 - `^seq` ≡ the set `{ depth(n) | n ≥ 1 }`
 
 Depth may be expressed directly as a selector qualifier:
-- `.mt:depth(n)` where `n ∈ ℤ`
-- Optional extension: `.mt:depth(a..b)` with `a ≤ b`, inclusive
+- `.seg:depth(n)` where `n ∈ ℤ`
+- Optional extension: `.seg:depth(a..b)` with `a ≤ b`, inclusive
 
 Examples (canonical forms):
-- `depth(0) > .mc[offset=0]`            # active turn core
-- `.mt:depth(1) > .cb#summary`          # last committed turn’s summary
-- `.mt:depth(2)`                         # second most recent committed turn
-- `depth(-1) > .cb#policy`               # system container child (if authorized)
+- `depth(0) > .cont[offset=0]`            # active head core container
+- `.seg:depth(1) > .block#summary`        # last committed segment’s summary
+- `.seg:depth(2)`                         # second most recent committed segment
+- `depth(-1) > .block#policy`             # system container child (if authorized)
 
 Where an alias appears, the depth form MUST be accepted and treated as identical:
-- `^ah > .mc[offset=0]` ≡ `depth(0) > .mc[offset=0]`
-- `^seq .mt:depth(1)` ≡ `.mt:depth(1)`
+- `^ah > .cont[offset=0]` ≡ `depth(0) > .cont[offset=0]`
+- `^seq .seg:depth(1)` ≡ `.seg:depth(1)`
 - `^sys > *` ≡ `depth(-1) > *`
 
 Attribute filters remain unchanged and MAY be combined with depth predicates: `[key]`, `[type]`, `[tag]`, etc. Overlap note: `[key="K"]` MAY return multiple matches; use depth ordering or additional filters (e.g., `:depth(>0):first`) to choose the newest instance.
@@ -88,13 +101,13 @@ Selectors MUST support attributes:
 #### 3.5.1 Grouped Shorthand (Normative)
 In addition to `[attr]` filters, implementations MUST support a grouped shorthand form using parentheses immediately after a type token. Example:
 ```
-.cb(kind='important' ttl=5)
+.block(kind='important' ttl=5)
 ```
 is semantically identical to:
 ```
-.cb[kind='important'][ttl=5]
+.block[kind='important'][ttl=5]
 ```
-Attributes inside `(...)` are separated by space or comma. This is purely syntactic sugar; engines MUST normalize grouped forms to canonical bracket filters before evaluation. Mixing forms is allowed: `.cb(kind='summary')[ttl<=2]`.
+Attributes inside `(...)` are separated by space or comma. This is purely syntactic sugar; engines MUST normalize grouped forms to canonical bracket filters before evaluation. Mixing forms is allowed: `.block(kind='summary')[ttl<=2]`.
 
 Parentheses immediately following a type token are reserved for this shorthand and MUST NOT collide with pseudos; pseudo-classes continue to use the `:` prefix (e.g., `:depth(...)`).
 
@@ -121,13 +134,16 @@ Validators MUST reject selectors that reference these facets when no `@t` is pre
 Examples:
 
 ```
-@t0 (d1, *:cb[kind="summary"]) [age<2]
-@t0..@t-3 (d2, *:cb) @mode=latest [depth=2]
+@t0 (d1, *:block[kind="summary"]) [age<2]
+@t0..@t-3 (d2, *:block) @mode=latest [depth=2]
 ```
 
-### 3.6 Combinators
-- Descendant: `A B`  
-- Child: `A > B`
+### 3.6 Search Operators
+- Single-step: `? { … }`  
+- Recursive: `?? { … }`  
+- Scoped recursive: `within(hops…) ?? { … }`
+
+Note: CSS-style descendant/child combinators are not part of the canonical grammar; use `?` and `??` instead.
 
 ### 3.7 Snapshots
 Snapshots are addressable with `@t0` (latest committed turn/snapshot), `@t-1` (older), `@cN` (absolute cycle), or `@*` (all).
@@ -143,21 +159,25 @@ Range addressing across snapshots MUST be supported with **inclusive** semantics
 
 Ranges, `@mode`, and time‑derived facets (see §3.5.3) are valid only on snapshots (i.e., when a `@t` is present). Validators MUST reject such facets when no `@t` is provided.
 
+#### 3.7.1 History Sugar
+
+`@history` is shorthand for `@t0..@t-*` (newest to oldest inclusive). Implementations MUST expand this to the equivalent temporal range.
+
 ### 3.8 Position
 
 Hops may include:
 
 - `dN` or `depth(N)` to navigate into `^seq` (structural depth).  
 - `seg` to indicate a segment container explicitly.  
-- `mc`, `cb`, and facet filters as before.  
+- `cont`, `block`, and facet filters as before.  
 
 Examples:
 
 ```
-(d0, mc[offset=0], *:cb[role="user"])
-(d1, seg, mc[offset=0], *:cb[role="assistant"])
-(d2, seg, *:cb[kind="summary"])
-(d-1, *:cb[role="system"])
+(d0, cont[offset=0], *:block[role="user"])
+(d1, seg, cont[offset=0], *:block[role="assistant"])
+(d2, seg, *:block[kind="summary"])
+(d-1, *:block[role="system"])
 ```
 
 ### 3.9 Insertion
@@ -172,9 +192,18 @@ Use structural cues inside the selector, not API flags:
 Examples:
 
 ```
-(d0, seg, mc[offset=0], )                 # insert at start
-(d0, seg, mc[offset=0], end)              # insert at end
-(d0, seg, mc[offset=0], +1)               # insert after child 1
+(d0, seg, cont[offset=0], )                 # insert at start
+(d0, seg, cont[offset=0], end)              # insert at end
+(d0, seg, cont[offset=0], +1)               # insert after child 1
+
+### 3.10 Shorthand Semantics
+
+- `#key` ≡ `{ key="…" }` and MUST NOT resolve to IDs.
+- `+tag`:
+  - At root: implies deep search: `?? { tag="…" }`. Multiple `+tag` are ANDed and SHOULD be normalized alphabetically.
+  - Postfix (after a position): filter only (no deep search).
+- Quoted keys are supported: `#'hero banner'`.
+- Formatters SHOULD merge `{ tag=… }` with `+tag` chains and normalize.
 ```
 
 ### 3.7.1 Conformance for Range Results (Normative)
@@ -185,17 +214,17 @@ Examples:
 **Examples**
 ```text
 # Non-range (IDs)
-ctx.select("@t0 ^seq .mt:depth(1) .mc > .cb[role='assistant']")
-→ ["cb:a1", "cb:a7", ...]
+ctx.select("@t0 ^seq .seg:depth(1) .cont > .block[role='assistant']")
+→ ["block:a1", "block:a7", ...]
 
 # Range (RangeDiffLatestResult)
-ctx.select("@t-3..@t0 ^seq .mt .cb[nodeType='cb'][kind='summary']")
+ctx.select("@t-3..@t0 ^seq .seg .block[nodeType='block'][kind='summary']")
 → {
-     "query": "@t-3..@t0 ^seq .mt .cb[nodeType='cb'][kind='summary']",
+     "query": "@t-3..@t0 ^seq .seg .block[nodeType='block'][kind='summary']",
      "snapshots": [ { "label":"@t0" }, { "label":"@t-1" }, { "label":"@t-2" }, { "label":"@t-3" } ],
      "diffs": [
-       { "from":{"label":"@t0"}, "to":{"label":"@t-1"}, "added_ids":[], "removed_ids":["cb:sum:c101"], "changed":[] },
-       { "from":{"label":"@t-1"}, "to":{"label":"@t-2"}, "added_ids":["cb:sum:c102"], "removed_ids":[], "changed":[] },
+       { "from":{"label":"@t0"}, "to":{"label":"@t-1"}, "added_ids":[], "removed_ids":["block:sum:c101"], "changed":[] },
+       { "from":{"label":"@t-1"}, "to":{"label":"@t-2"}, "added_ids":["block:sum:c102"], "removed_ids":[], "changed":[] },
        { "from":{"label":"@t-2"}, "to":{"label":"@t-3"}, "added_ids":[], "removed_ids":[], "changed":[] }
      ],
      "mode": "pairwise"
@@ -206,41 +235,58 @@ ctx.select("@t-3..@t0 ^seq .mt .cb[nodeType='cb'][kind='summary']")
 
 ## 4. Grammar (EBNF)
 ```ebnf
-# SnapshotRange presence affects ONLY the return type (IDs vs RangeDiffLatestResult).
-Selector   ::= [Snapshot] Group { "," Group }
-Group      ::= Chain
-Chain      ::= Step { Combinator Step }
-Step       ::= Simple
-Combinator ::= " " | ">"
-Simple     ::= [Root] [ID] [Type] [AttrGroup?] [Attr*] [Pseudo*] | "*"
+# Canonical selector shape: @time (position) { attributes } [ behavior ] @controls
 
-Snapshot        ::= SnapshotAtom | SnapshotRange
-SnapshotAtom    ::= "@" ( "t" [ "-" ] Digit+ | "c" Digit+ | "*" )
-SnapshotRange   ::= SnapshotAtom ".." SnapshotAtom   # inclusive; ":" interchangeable with ".."
-Root            ::= "^" ("sys" | "seq" | "ah" | "root")
-ID              ::= "#" Identifier
-Type            ::= "." Identifier
-Attr            ::= "[" Key [Op Value] "]"
-AttrGroup       ::= "(" AttrPair { (" " | ",") AttrPair } ")"
-AttrPair        ::= Key [Op Value]
-Pseudo          ::= ":" Identifier [ "(" ValueList ")" ]
+selector        := temporal_opt search_or_position attributes_opt behavior_opt controls_opt ;
+temporal_opt    := /* WS if omitted */ | "@t" rel | "@t" rel ".." "@t" rel | "@history" ;
+rel             := "0" | ("-" uint) | ("+" uint) ;   # supports "@t0..@t-*"
 
-ValueList  ::= Value { "," Value }
-Value      ::= Number | String | Identifier | Range
-Range      ::= Number "-" Number
-Number     ::= [ "-" ] Digit+ [ "." Digit+ ]
-String     ::= '"' StringChar* '"' | "'" StringChar* "'"
-Identifier ::= Letter ( Letter | Digit | "_" | "-" | ":" )*
-Key        ::= Identifier
-Op         ::= "=" | "!=" | "<" | "<=" | ">" | ">="
-Letter     ::= "a".."z" | "A".."Z"
-Digit      ::= "0".."9"
-StringChar ::= [^"'] | "\\" ( '"' | "'" | "\\" )
+search_or_position := position | deep_search | shorthand_root ;
+
+# position (parens canonical; single-hop shorthand optional if already allowed)
+position        := "(" hop ( "," hop )* ")" postfix_tags_opt
+                 | hop postfix_tags_opt ;
+
+hop             := "d" int
+                 | int ( hop_propblock )?
+                 | "cont" "[" "offset" "=" int "]"
+                 | ( "*" | int ) ":" "block" "." ident
+                 | "seg" ( hop_propblock )?
+                 | "?" ws* hop_propblock ;
+
+deep_search     := "??" ws* hop_propblock
+                 | "within" "(" hop ( "," hop )* ")" ws* "??" ws* hop_propblock ;
+
+shorthand_root  := key_short | tag_chain ;
+key_short       := "#" key_token ;                    # key only (NEVER id)
+tag_chain       := "+" ident ( ws+ "+" ident )* ;     # root +tag implies deep search
+
+postfix_tags_opt:= ( ws* "+" ident )* ;               # postfix +tag filters only
+
+hop_propblock   := "{" prop ( "," prop )* "}" ;
+attributes_opt  := ( ws* "{" prop ( "," prop )* "}" )? ;
+behavior_opt    := ( ws* "[" bprop ( "," bprop )* "]" )? ;
+prop            := ident cmp value | ident "=" array | ident "=" value ;
+bprop           := ident bcmp bval | "ephemeral" | "sticky" ;
+cmp             := "=" | "!=" | ">=" | "<=" | ">" | "<" | "~" ;
+bcmp            := "=" | "!=" | ">=" | "<=" | ">" | "<" | "~" ;
+value           := int | ident | quoted ;
+array           := "[" value ( "," value )* "]" ;
+controls_opt    := ( ws+ control )* ;
+control         := "@mode=" ("union"|"latest"|"reduce")
+                 | "@p=" uint
+                 | "@limit=" uint
+                 | "@order=" ("pre"|"post"|"bfs"|"path"|"turn:asc,pre"|"turn:desc,pre")
+                 | "@first" | "@unique" ;
+int             := ("-"|"+")? uint ;
+uint            := DIGIT { DIGIT } ;
+quoted          := "'" { ANY_BUT_SINGLE_QUOTE | "\\'" } "'"
+                 | '"' { ANY_BUT_DOUBLE_QUOTE | '\\"' } '"' ;
 ```
 
 **Normalization Rule (Normative)**  
 - Every `AttrGroup` MUST be expanded into the equivalent sequence of `Attr` before evaluation.  
-- Example: `.cb(role='system' ttl=20)` ⇒ `.cb[role='system'][ttl=20]`.  
+- Example: `.block(role='system' ttl=20)` ⇒ `.block[role='system'][ttl=20]`.  
 - Empty groups `()` are invalid and MUST raise an error.
 
 Constraints:
@@ -263,10 +309,10 @@ RangeDiffLatestResult {
 }
 
 # Depth forms (UD)
-ctx.select("^seq .mt:depth(>0)")
-ctx.select(".mt:depth(0)")                # Active Head
-ctx.select(".mt:depth(<0)")               # System depth
-ctx.select(".mt:depth({1,2}) .cb")        # Newest two historical turns
+ctx.select("^seq .seg:depth(>0)")
+ctx.select(".seg:depth(0)")                # Active Head
+ctx.select(".seg:depth(<0)")               # System depth
+ctx.select(".seg:depth({1,2}) .block")        # Newest two historical turns
 
 SnapshotRef { "kind":"t"|"c", "value":number, "label":string, "cycle":number }
 
@@ -361,7 +407,7 @@ For string attributes, implementations MUST:
 
 ```
 [role='user']           # exact string match (case-sensitive)
-[nodeType='cb'][kind='summary'] # exact match by canonical nodeType and kind
+[nodeType='block'][kind='summary'] # exact match by canonical nodeType and kind
 [id!='abc123']          # string inequality
 ```
 
@@ -381,30 +427,34 @@ When attribute type is ambiguous:
 
 ## 6. Examples
 
-# all pre-context content blocks in active head
+"""
+# Canonical-shape examples (Python string API)
 
-ctx.select("@t0 ^ah :pre .cb")
+# All pre-context blocks in WS
+ctx.select("(d0, *:block) { role=system } [ ttl>0 ]")
 
-# assistant replies from last sealed turn
-ctx.select("^seq .mt:depth(1) .mc > .cb[role='assistant']")
+# Assistant replies from last sealed segment
+ctx.select("@t0 (d1, seg, cont[offset=0], *:block) { role=assistant }")
 
-# expired or soon-to-expire blocks
-ctx.select("^root .cb[ttl<=1]")
+# Expiring soon
+ctx.select("(d-1, *:block) { ttl<=1 }")
 
-# a specific node by ID
-ctx.select("#abc123def")
+# By key (shorthand); NEVER id
+ctx.select("#hero")            # ≡ { key='hero' }
 
-# last three historical turns, all user messages
-ctx.select("^seq .mt:depth(1,2,3) .cb[role='user']")
+# History sugar and controls
+ctx.select("@history +featured @first")
 
-# last three historical turns (range form), all user messages
-ctx.select("^seq .mt:depth(1-3) .cb[role='user']")
+# Deep search
+ctx.select("?? { tag='summary' }")
+ctx.select("within(d1,d3) ?? { type=block, kind=summary } @order=bfs @limit=50")
 
-# last five historical turns (range form)
-ctx.select("^seq .mt:depth(1-5)")
+# Insertion sentinel (start of cont)
+ctx.add("(d0, cont[offset=0], )", "block:text { key='hero' }")
+"""
 
 # select across snapshot range t-5 through t-1 (inclusive)
-ctx.select("@t-5:@t-1 ^ah .cb")
+ctx.select("@t-5:@t-1 ^ah .block")
 
 # find a specific node across all available snapshots
 ctx.select("@* #abc123def")
@@ -412,10 +462,10 @@ ctx.select("@* #abc123def")
 # position node N under a specific historical turn (depth targeting)
 # select the target turn at depth 3 and then place N as post-context via offset>0
 # (actual placement is done by the implementation API; selector here shows targeting)
-ctx.select("^seq .mt:depth(3)")
+ctx.select("^seq .seg:depth(3)")
 
 # newest instance for a logical key K (sealed history)
-ctx.select("^seq .mt:depth(1) .cb[key='K']")
+ctx.select("^seq .seg:depth(1) .block[key='K']")
 
 # key selection with windowing (normative semantics)
 # engines MUST support equivalent of newest and second-newest selection
@@ -423,13 +473,13 @@ select("[key='K']").limit(1)                    # newest instance (per determini
 select("[key='K']").skip(1).limit(1)            # second-newest
 
 # composed examples
-select("[key='K']").where(".mt:depth(>0)")     # all history overlaps for K (excluding AH)
-select(".mt:depth(<0)[key='policy-banner']")    # system-scoped by key
+select("[key='K']").where(".seg:depth(>0)")     # all history overlaps for K (excluding AH)
+select(".seg:depth(<0)[key='policy-banner']")    # system-scoped by key
 
 # shorthand group form (equivalent to multiple [..] filters)
-ctx.select("^seq .mt:depth(1) .cb(role='assistant' ttl<=2)")
+ctx.select("^seq .seg:depth(1) .block(role='assistant' ttl<=2)")
 # equivalent to:
-ctx.select("^seq .mt:depth(1) .cb[role='assistant'][ttl<=2]")
+ctx.select("^seq .seg:depth(1) .block[role='assistant'][ttl<=2]")
 
 ---
 
@@ -451,18 +501,25 @@ Given this minimal snapshot fixture at `@t0`:
   "root": {
     "children": [
       { "id": "sys-1", "nodeType": "^sys", "children": [
-        { "id": "cb:sysA", "nodeType": "cb", "role": "system", "kind": "text", "offset": 0, "content": "S" }
+        { "id": "block:sysA", "nodeType": "block", "role": "system", "kind": "text", "offset": 0, "content": "S" }
       ]},
       { "id": "seq-1", "nodeType": "^seq", "children": [
-        { "id": "mt:1", "nodeType": "mt", "children": [
-          { "id": "cb:u1", "nodeType": "cb", "role": "user", "kind": "text", "offset": 0, "ttl": 2, "content": "U1" }
+        { "id": "seg:1", "nodeType": "seg", "children": [
+          { "id": "cont:1", "nodeType": "cont", "children": [
+            { "id": "block:u1", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "ttl": 2, "content": "U1" }
+          ]},
+          { "id": "cont:2", "nodeType": "cont", "children": [
+            { "id": "block:a1", "nodeType": "block", "role": "assistant", "kind": "text", "offset": 0, "ttl": 1, "content": "A1" }
+          ]}
         ]},
-        { "id": "mt:2", "nodeType": "mt", "children": [
-          { "id": "cb:a1", "nodeType": "cb", "role": "assistant", "kind": "text", "offset": 0, "ttl": 1, "content": "A1" }
+        { "id": "seg:2", "nodeType": "seg", "children": [
+          { "id": "cont:3", "nodeType": "cont", "children": [
+            { "id": "block:u2", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U2" }
+          ]}
         ]}
       ]},
       { "id": "ah-1", "nodeType": "^ah", "children": [
-        { "id": "cb:u2", "nodeType": "cb", "role": "user", "kind": "text", "offset": 0, "content": "U2" }
+        { "id": "block:u3", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U3" }
       ]}
     ]
   }
@@ -471,11 +528,11 @@ Given this minimal snapshot fixture at `@t0`:
 
 Implementations MUST produce exactly these results (IDs and order):
 
-1. `@t0 ^sys .cb` → `["cb:sysA"]`
-2. `@t0 ^seq .mt:depth(1)` → `["mt:2"]`
-3. `@t0 ^seq .mt:depth(1,2)` → `["mt:1","mt:2"]` (newer→older)
-4. `@t0 ^seq .mt:depth(1-2) .mc > .cb` → `["cb:u1","cb:a1"]`
-5. `@t0 #cb:u2` → `["cb:u2"]`
+1. `@t0 ^sys .block` → `["block:sysA"]`
+2. `@t0 ^seq .seg:depth(1)` → `["seg:1"]`
+3. `@t0 ^seq .seg:depth(1,2)` → `["seg:1","seg:2"]` (newer→older)
+4. `@t0 ^seq .seg:depth(1-2) .cont > .block` → `["cont:1","cont:2"]`
+5. `@t0 #block:u2` → `["block:u2"]`
 
 ## 6.3 Additional Range Fixture (Normative)
 
@@ -487,17 +544,17 @@ To validate range depth selectors, the following minimal snapshot fixture at `@t
   "root": {
     "children": [
       { "id": "seq-2", "nodeType": "^seq", "children": [
-        { "id": "mt:1", "nodeType": "mt", "children": [ { "id": "cb:u1", "nodeType": "cb", "role": "user", "kind": "text", "offset": 0, "content": "U1" } ] },
-        { "id": "mt:2", "nodeType": "mt", "children": [ { "id": "cb:u2", "nodeType": "cb", "role": "user", "kind": "text", "offset": 0, "content": "U2" } ] },
-        { "id": "mt:3", "nodeType": "mt", "children": [ { "id": "cb:u3", "nodeType": "cb", "role": "user", "kind": "text", "offset": 0, "content": "U3" } ] }
+        { "id": "seg:1", "nodeType": "seg", "children": [ { "id": "cont:1", "nodeType": "cont", "children": [ { "id": "block:u1", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U1" } ] } },
+        { "id": "seg:2", "nodeType": "seg", "children": [ { "id": "cont:2", "nodeType": "cont", "children": [ { "id": "block:u2", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U2" } ] } },
+        { "id": "seg:3", "nodeType": "seg", "children": [ { "id": "cont:3", "nodeType": "cont", "children": [ { "id": "block:u3", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U3" } ] } }
       ]}
     ]
   }
 }
 ```
 
-- Query: `@t0 ^seq .mt:depth(1-3) .cb[role='user']`
-  Expect: `["cb:u1","cb:u2","cb:u3"]` (newer→older across matched turns)
+- Query: `@t0 ^seq .seg:depth(1-3) .block[role='user']`
+  Expect: `["block:u1","block:u2","block:u3"]` (newer→older across matched turns)
 
 
 ## 7. Conformance Checklist
@@ -505,13 +562,13 @@ To validate range depth selectors, the following minimal snapshot fixture at `@t
 An implementation is conformant if:
 
 1. Roots ^sys, ^seq, ^ah, ^root MUST be supported.
-2. Types .mt, .mc, .cb MUST be supported.
-3. User-assigned nodeType MUST be matchable via namespaced type tokens (e.g., `.cb:summary`) and via attributes (e.g., `[nodeType='cb:summary']`).
+2. Types .seg, .cont, .block MUST be supported.
+3. User-assigned nodeType MUST be matchable via namespaced type tokens (e.g., `.block:summary`) and via attributes (e.g., `[nodeType='block:summary']`).
 4. IDs MUST be matched exactly (case-sensitive).
 5. All specified pseudos MUST be implemented.
 6. Attributes MUST support all comparison operators.
 7. Combinators (descendant, child) MUST be supported.
-8. Snapshots (@t0, @t-1, @cN, @*) MUST be supported.
+8. Snapshots (@t0, @t-1, @cN, @*, and @history) MUST be supported.
 9. Results MUST be ordered canonically.
 10. Queries MUST be pure (no side effects).
 11. Invalid selectors MUST raise errors.
@@ -521,6 +578,9 @@ An implementation is conformant if:
 15. Default scope if omitted MUST be the working state (Active Head) (see §3.7); implementations MUST NOT assume `@t0` for queries without an explicit snapshot.
 16. Snapshot range addressing (`@tA..B` and `@tA:B`) MUST be supported with inclusive semantics and both operators MUST be interchangeable.
 17. Grouped-attribute shorthand `Type(attr1 op val1 [ ,|\s attr2 op val2 ... ])` MUST be accepted and normalized to canonical bracket filters prior to evaluation; `[key=val]` syntax remains fully valid.
+18. Shorthands `#key` and `+tag` MUST be supported with semantics defined in §3.10 (root `+tag` implies deep search; postfix `+tag` filters only).
+19. Deep search operators `?` (single-step) and `??` (recursive) MUST be supported; chaining `? ?` is invalid.
+20. Controls `@mode`, `@p`, `@limit`, `@order`, `@first`, `@unique` MUST be parsed and applied.
 
 - MUST parse SnapshotRange and reject mixed kinds ("@t..@c") or wildcard endpoints ("@*" in ranges).
 - MUST return RangeDiffLatestResult when a SnapshotRange is present in the selector.
@@ -533,34 +593,34 @@ An implementation is conformant if:
 
 Given the minimal snapshot fixture in §6.2, implementations MUST produce exactly these ordered ID results:
 
-- Query: `@t0 ^sys .cb`
-  Expect: `["cb:sysA"]`
+- Query: `@t0 ^sys .block`
+  Expect: `["block:sysA"]`
 
-- Query: `@t0 ^seq .mt:depth(1)`
-  Expect: `["mt:2"]`
+- Query: `@t0 ^seq .seg:depth(1)`
+  Expect: `["seg:1"]`
 
-- Query: `@t0 ^seq .mt:depth(1,2)`
-  Expect: `["mt:1","mt:2"]` (newer→older)
+- Query: `@t0 ^seq .seg:depth(1,2)`
+  Expect: `["seg:1","seg:2"]` (newer→older)
 
-- Query: `@t0 ^seq .mt:depth(1-2) .mc > .cb`
-  Expect: `["cb:u1","cb:a1"]`
+- Query: `@t0 ^seq .seg:depth(1-2) .cont > .block`
+  Expect: `["cont:1","cont:2"]`
 
-- Query: `@t0 ^seq .mt:depth(1) > .cb`
-  Expect: `["cb:a1"]`
+- Query: `@t0 ^seq .seg:depth(1) > .block`
+  Expect: `["block:a1"]`
 
-- Query: `@t0 #cb:u2`
-  Expect: `["cb:u2"]`
+- Query: `@t0 #block:u2`
+  Expect: `["block:u2"]`
 
-- Query: `@t0 .cb[role='assistant']`
-  Expect: `["cb:a1"]`
+- Query: `@t0 .block[role='assistant']`
+  Expect: `["block:a1"]`
 
-- Query: `@t0 ^seq .mt:depth(1-2) .cb[ttl<=1]`
-  Expect: `["cb:a1"]`
+- Query: `@t0 ^seq .seg:depth(1-2) .block[ttl<=1]`
+  Expect: `["block:a1"]`
 
-- Query: `@t0 ^seq .mt:depth()`
+- Query: `@t0 ^seq .seg:depth()`
   Expect: MUST raise an error (invalid selector: empty depth)
 
-- Query: `@t0 ^seq .mt:depth(3) .cb[role='user']`
+- Query: `@t0 ^seq .seg:depth(3) .block[role='user']`
   Expect: `[]` (empty match, not an error)
 
 [← 03-lifecycle-ttl](03-lifecycle-ttl.md) | [↑ Spec Index](../README.md) | [→ 05-snapshots](05-snapshots.md)

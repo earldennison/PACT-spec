@@ -11,12 +11,12 @@ Concise definitions of key PACT terms, with section references.
 **Active Turn (`at`)** — Temporal scope of editability within the current cycle.
 Includes the `^ah` and any other nodes created during this cycle. Ends when commit seals the turn.
 - Turn: A committed snapshot of the entire context tree. Each commit produces exactly one new turn. Immutable. Contains `^sys`, `^seq` (segments), and `^ah` as it was at commit.
-- Segment (`seg`): Structural container under `^seq` holding exactly one `mc` core (`offset=0`) plus optional pre-context (`cb` with `offset<0`) and post-context (`cb` with `offset>0`). At commit, `d0` becomes a new segment appended to `^seq` in the new turn. Segments are structural only; they carry no temporal meaning.
+- Segment (`seg`): Structural container under `^seq` holding exactly one `cont` core (`offset=0`) plus optional pre-context (`block` with `offset<0`) and post-context (`block` with `offset>0`). At commit, `d0` becomes a new segment appended to `^seq` in the new turn. Segments are structural only; they carry no temporal meaning.
 - Active Head (^ah): The working state at depth(0). Fully mutable subject to structural invariants until commit; becomes a segment at commit.
-- Region Aliases: ^ah (alias) ≡ depth(0), ^seq (alias) ≡ { .mt:depth(n) | n≥1 }, ^sys (alias) ≡ depth(-1).
+- Region Aliases: ^ah (alias) ≡ depth(0), ^seq (alias) ≡ { .seg:depth(n) | n≥1 }, ^sys (alias) ≡ depth(-1).
 - Terminology: Do not use “sealed conversational turn.” Use “turn” only for the full snapshot. Use “segment” for the structural container under `^seq`. Use “sealing” only to refer to the commit-time operation.
-- Core (`mc`): MessageContainer at `offset=0` inside a turn; the main message body. Exactly one per `mt`. See 02 – Invariants §4.2.
-- Content Block (`cb`): Leaf/content node (text/call/result/media, etc.) with optional `role` and `kind`. See 01 – Architecture §2.
+- Core (`cont`): Container at `offset=0` inside a segment/turn; the main message body. Exactly one per segment. See 02 – Invariants §4.2.
+- Block (`block`): Leaf/content node (text/call/result/media, etc.) with optional `role` and `kind`. See 01 – Architecture §2.
 - Combinator: Selector relationship operators. Descendant (`A B`) matches any descendant; child (`A > B`) matches direct children only. See 04 – Selectors §3.3, §4.
 - Effective History: Rendered history computed from historical turns plus any additions
   (e.g., summaries, redactions, corrections) created after sealing. **PACT does not
@@ -25,7 +25,7 @@ Includes the `^ah` and any other nodes created during this cycle. Ends when comm
   summary instead of originals”) is an implementation decision outside PACT
   conformance. See 03 – Lifecycle §5.3.lso
 - Depth: Structural index inside `^seq` within a turn: `d0` = active head, `d1,d2,…` = segments, `d-1` = system. Structural only; not a synonym for turn. See 01 – Architecture §3.2.
-- Offset: Position of children inside a segment: `<0` pre (`cb`), `=0` core (`mc`), `>0` post (`cb`). See 02 – Invariants §4.1.
+- Offset: Position of children inside a segment: `<0` pre (`block`), `=0` core (`cont`), `>0` post (`block`). See 02 – Invariants §4.1.
 - Regions: Root children `^sys`, `^seq`, `^ah` under `^root`. See 02 – Invariants §2.
 - Commit Sequence: TTL → Pruning/Compaction (if implemented) → Seal → Snapshot. Canonical rule in 03 – Lifecycle §7.
 - Removable container: A container explicitly marked `removable=true` at creation or by deterministic policy; when all children expire or are pruned, it MUST be removed in the same commit. Root (`^root`) and region containers (`^sys`, `^seq`, `^ah`) MUST NOT be removable. See 02 – Invariants §5.3.1.

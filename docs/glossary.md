@@ -15,7 +15,7 @@ A committed snapshot of the entire context tree.
 
 **Segment (`seg`)**  
 Structural container under `^seq`.  
-- Each segment holds exactly one core (`mc`) plus optional pre-context (`cb` with `offset < 0`) and post-context (`cb` with `offset > 0`).  
+- Each segment holds exactly one core (`cont`) plus optional pre-context (`block` with `offset < 0`) and post-context (`block` with `offset > 0`).  
 - Segments are ordered strictly by depth index (`d1`, `d2`, …).  
 - At commit, the active head (`d0`) becomes a new segment appended to `^seq` in the new turn.  
 - Segments are structural only; they carry no temporal meaning.
@@ -23,20 +23,20 @@ Structural container under `^seq`.
 **Active Head (`^ah`)**  
 The working state container at `d0` (editable). At commit, `^ah` becomes a new segment appended to `^seq` in the new turn.
 
-**MessageContainer (`mc`)**  
-Core container at **`offset = 0`** within a turn. Pre‑context attaches at negative offsets; post‑context at positive offsets.
+**Container (`cont`)**  
+Core container at **`offset = 0`** within a segment/turn. Pre‑context attaches at negative offsets; post‑context at positive offsets.
 
-**ContentBlock (`cb`)**  
+**Block (`block`)**  
 Leaf/content node (text, tool call, tool result, media, document, etc.). Provider‑agnostic. MAY include attributes like `role` and `kind`.
 
 **NodeType**  
 A string that classifies a node.
-- **Canonical types**: `seg`, `mc`, `cb` — required for interoperability.  
-- **User‑assigned types**: Implementations or developers may define namespaced types (e.g., `cb:summary`, `cb:sql_query`, `custom:note`).  
-Selectors MUST be able to target both canonical and user‑assigned types (e.g., `.cb` or `[nodeType="cb"][kind="summary"]`).
+- **Canonical types**: `seg`, `cont`, `block` — required for interoperability.  
+- **User‑assigned types**: Implementations or developers may define namespaced types (e.g., `block:summary`, `block:sql_query`, `custom:note`).  
+Selectors MUST be able to target both canonical and user‑assigned types (e.g., `.block` or `[nodeType="block"][kind="summary"]`).
 
 **Relative Offset (`offset`)**  
-Position of children inside a segment: `< 0` = pre‑context `cb`, `= 0` = `mc` core, `> 0` = post‑context `cb`.
+Position of children inside a segment: `< 0` = pre‑context `block`, `= 0` = `cont` core, `> 0` = post‑context `block`.
 
 **Depth**  
 Structural index inside `^seq` within a turn.  
@@ -44,6 +44,7 @@ Structural index inside `^seq` within a turn.
 - `d1`, `d2`, … = the first, second, … segment inside `^seq`.  
 - `d-1` = system container.  
 Depth is structural only; it is not a synonym for turn.
+Entering `seg` is implicit after a `dN` hop; write `seg{…}` only when filtering/operating on the segment node.
 
 **Cycle**  
 One rebuild/commit iteration of the tree. TTL expiry and snapshots align to cycles.
@@ -97,3 +98,12 @@ A provider call execution within the Active Turn. Tracked in telemetry with fiel
 
 **Provider Thread**  
 Provider‑agnostic linearization (ClientRequest / ProviderResponse) derived deterministically from the PACT tree.
+
+**Working State (WS)**  
+The live, editable tree (no `@t`). WS has no time‑derived properties; edits and structural mutations are allowed until commit, subject to invariants and validation.
+
+**Key vs ID**  
+IDs are engine‑assigned and hidden by default; developers address nodes by `key` or structure.  
+- `#key` ≡ `{ key='…' }` (NEVER id)  
+- `{ id='…' }` selects by ID explicitly  
+- `+tag` at root implies deep search (`?? { tag=… }`); postfix `+tag` filters only

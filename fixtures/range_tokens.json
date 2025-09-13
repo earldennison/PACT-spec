@@ -1,5 +1,5 @@
 {
-  "selector": "@t-4..@t-6 ^seq .mt .cb[kind='text']",
+  "selector": "@t-4..@t-6 ^seq .seg .block[kind='text']",
   "snapshots":[{"label":"@t-4"},{"label":"@t-5"},{"label":"@t-6"}],
   "diffs":[
     {
@@ -7,7 +7,7 @@
       "added_ids":[], "removed_ids":[],
       "changed":[
         {
-          "id":"cb:text:9",
+          "id":"block:text:9",
           "fields":["content_hash"],
           "delta":{"content_hash":{"from":"x","to":"y"}},
           "content_diff":{

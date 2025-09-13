@@ -18,7 +18,7 @@ Under `^root`, implementations MUST provide exactly these regions:
 
 ### 2.3 Region Movement (Pre‑Commit)
 Prior to commit (within a cycle), implementations MAY re‑parent any node across regions except:
-- `mt` (message turns) — MAY move only via sealing transition `^ah` → `^seq`;
+- `seg` (message turns) — MAY move only via sealing transition `^ah` → `^seq`;
 - the region container `^sys` — MUST NOT be re‑parented.
 
 At commit, region placement is evaluated against invariants. Between snapshots, re‑parenting is observable via diffs (§9.3). Implementations SHOULD realize cross‑region relocations by add/remove operations that yield identical rendered bytes at commit.  
@@ -67,7 +67,7 @@ Each node MUST include:
 |------------------|----------|----------|------------------------------------------|-------|
 | `id`             | string   | MUST     | Immutable within a snapshot               | Opaque identifier (UUID/hash) |
 | `nodeType`       | string   | MUST     | Immutable                                 | Canonical or namespaced user type |
-| `offset`         | number   | MUST     | Immutable post-creation within a cycle    | `<0` pre, `0` core (`mc`), `>0` post |
+| `offset`         | number   | MUST     | Immutable post-creation within a cycle    | `<0` pre, `0` core (`cont`), `>0` post |
 | `ttl`            | number∣null | MUST  | MAY change by lifecycle evaluation        | Cycle-based TTL semantics |
 | `priority`       | number   | MUST     | Immutable unless policy updates           | Used for pruning order |
 | `cycle`          | number   | MUST     | Immutable                                 | Introducing commit’s cycle |
@@ -82,16 +82,16 @@ Each node MUST include:
 
 ### 3.3 Canonical Types
 Canonical classes:
-- `mt` — MessageTurn
-- `mc` — MessageContainer (offset=0)
-- `cb` — ContentBlock
+- `seg` — MessageTurn
+- `cont` — Container (offset=0)
+- `block` — Block
 
 ### 3.4 User-Assigned Types
-Implementations MAY define user types (e.g., `cb:summary`). Selectors MUST still resolve these as `.cb`.
+Implementations MAY define user types (e.g., `block:summary`). Selectors MUST still resolve these as `.block`.
 
 ### 3.5 Attribute Creation and Stability (Normative)
 - Source of truth: Selector attributes map to node headers. Implementations MUST populate all mandatory headers; optional headers MAY be omitted.
-- Namespacing: Custom attributes MUST be namespaced (e.g., `content_*`, `data_*`, `cb:foo`) and MUST NOT collide with reserved names.
+- Namespacing: Custom attributes MUST be namespaced (e.g., `content_*`, `data_*`, `block:foo`) and MUST NOT collide with reserved names.
 - Types: Header types are stable: `offset` | `ttl` | `priority` | `cycle` | `created_at_ns` | `creation_index` are numeric; `id` | `nodeType` | `created_at_iso` | `role` | `kind` are strings. Custom attributes SHOULD use a single stable type across a node’s lifetime.
 - Immutability: Creation-time headers MUST remain stable; only lifecycle fields (e.g., `ttl`) MAY change per §3 and §5.
 - Defaults and nulls: Missing optional attributes compare as `null` per Selectors §5.5; required headers MUST be present (non-null).
@@ -108,29 +108,29 @@ This section is the normative, canonical source for placement (offset semantics 
 ### 4.1 Offsets
 Offsets define placement:
 - `<0` → pre-context
-- `=0` → core (`mc`)
+- `=0` → core (`cont`)
 - `>0` → post-context
 
 #### 4.1.1 Example: Content in offset nodes
 
-A turn (`mt`) with content-bearing nodes at negative and positive offsets, and the core message in `mc @ offset=0`:
+A segment (`seg`) with content-bearing nodes at negative and positive offsets, and the core message in `cont @ offset=0`:
 
 ```json
 {
-  "id": "mt:42",
-  "nodeType": "mt",
+  "id": "seg:42",
+  "nodeType": "seg",
   "children": [
-    { "id": "cb:pre1",  "nodeType": "cb", "offset": -1, "role": "system",   "kind": "text",   "content": "Contextual hint" },
-    { "id": "mc:42",    "nodeType": "mc", "offset": 0,  "children": [
-      { "id": "cb:u42", "nodeType": "cb",               "role": "user",     "kind": "text",   "content": "Hello" }
+    { "id": "block:pre1",  "nodeType": "block", "offset": -1, "role": "system",   "kind": "text",   "content": "Contextual hint" },
+    { "id": "cont:42",    "nodeType": "cont", "offset": 0,  "children": [
+      { "id": "block:u42", "nodeType": "block",               "role": "user",     "kind": "text",   "content": "Hello" }
     ] },
-    { "id": "cb:post1", "nodeType": "cb", "offset": 1,  "role": "tool",     "kind": "result", "content": "status: ok" }
+    { "id": "block:post1", "nodeType": "block", "offset": 1,  "role": "tool",     "kind": "result", "content": "status: ok" }
   ]
 }
 ```
 
 ### 4.2 Core Container
-Each turn MUST have exactly one `mc` at `offset=0`.
+Each segment MUST have exactly one `cont` at `offset=0`.
 
 ### 4.3 Ordering
 Siblings MUST be ordered by this canonical sequence:
@@ -161,11 +161,11 @@ Node C: offset=0,  created_at_ns=1001, creation_index=2, id="b"
 ### 4.5 Re-Parenting
 
 Prior to commit, nodes MAY be re‑parented (moved to a different parent) provided that:
-1. `mt` nodes themselves are not re‑parented (turn identity and order are fixed; `mt` moves only by sealing `^ah` → `^seq`).
+1. `seg` nodes themselves are not re‑parented (segment identity and order are fixed; `seg` moves only by sealing `^ah` → `^seq`).
 2. The region container `^sys` is not re‑parented.
 3. Conformance is evaluated on snapshot structure and serialized bytes, not internal mutation mechanics.
 
-After sealing, `mc[offset=0]` cores are immutable (§6.4). Non‑core nodes MAY be attached or detached relative to historical turns by adding/removing nodes (e.g., post‑context attachments); sealed records are not mutated in place.
+After sealing, `cont[offset=0]` cores are immutable (§6.4). Non‑core nodes MAY be attached or detached relative to historical turns by adding/removing nodes (e.g., post‑context attachments); sealed records are not mutated in place.
 
 ## 5. Lifecycle
 ### 5.1 TTL
@@ -193,16 +193,16 @@ Nodes with live references MUST NOT be removed (expired or pruned). If liveness 
 There MUST be at most one `^ah` per snapshot.
 
 ### 6.2 Sealing
-At commit, `^ah` is sealed into `^seq` as a new `mt`. The sealed `mc` is immutable.
+At commit, `^ah` is sealed into `^seq` as a new `seg`. The sealed `cont` is immutable.
 
-No sealing occurs during the Active Turn (at). Sealing only happens at the commit boundary, when ^ah becomes a new mt under ^seq.
+No sealing occurs during the Active Turn (at). Sealing only happens at the commit boundary, when ^ah becomes a new seg under ^seq.
 
 ### 6.3 Depth
 Depth is globally defined as in §2.4. In `^seq`, depth counts newest→oldest (`1` = most recent historical turn).  
 The Active Turn is **depth-addressable** as `depth(0)` (alias `^ah`).
 
 ### 6.4 Immutability
-Sealed cores (`mc @ offset=0`) MUST NOT be mutated. Snapshots are immutable records. Non‑core nodes (pre/post context, summaries, redactions, corrections, containers) MAY be added or removed in subsequent cycles, including attachments targeting historical turns, via new nodes and lifecycle—never by mutating sealed bytes in place.
+Sealed cores (`cont @ offset=0`) MUST NOT be mutated. Snapshots are immutable records. Non‑core nodes (pre/post context, summaries, redactions, corrections, containers) MAY be added or removed in subsequent cycles, including attachments targeting historical turns, via new nodes and lifecycle—never by mutating sealed bytes in place.
 
 ## 7. Pruning (Optional)
 **Preface.** Pruning is **optional**. If pruning is disabled, an implementation remains conformant by
@@ -254,7 +254,7 @@ See Lifecycle §7 for Commit Sequence (Normative). A snapshot MUST serialize to 
 ### 9.2 Features
 Selectors MUST support:
 - Roots: `^sys`, `^seq`, `^ah`, `^root`
-- Types: `.mt`, `.mc`, `.cb`
+- Types: `.seg`, `.cont`, `.block`
 - IDs: `#<id>`
 - Pseudos: `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)`
 - Attributes: `[offset] [ttl] [priority] [cycle] [nodeType] [role] [kind]`
@@ -271,7 +271,7 @@ TTL changes MUST be reported as modifications.
 Implementations MAY provide richer change models, but MUST preserve determinism and id‑based correspondence.
 
 ## 10. Validation
-- Only one `mc` at offset=0 per turn.  
+- Only one `cont` at offset=0 per segment.  
 - Only one `^ah` per snapshot.  
 - Unknown `nodeType` values MUST fall back to canonical mapping.  
 - Invalid selectors MUST raise errors.
@@ -280,7 +280,7 @@ Implementations MAY provide richer change models, but MUST preserve determinism 
 An implementation is conformant if:
 1. Regions `^sys`, `^seq`, `^ah` exist.
 2. Nodes carry required headers.
-3. Each turn has exactly one `mc[offset=0]`.
+3. Each segment has exactly one `cont[offset=0]`.
 4. Ordering rules are enforced.
 5. TTL expiry + cascade occur at commit.
 6. Sealed cores are immutable; snapshots are immutable.
@@ -298,11 +298,11 @@ An implementation is conformant if:
 ## Example
 
 ```text
-mt (MessageTurn)
- ├─ cb (offset <0)   ← pre-context
- ├─ mc (offset =0)   ← core
- │    └─ cb          ← content
- └─ cb (offset >0)   ← post-context
+seg (MessageTurn)
+ ├─ block (offset <0)   ← pre-context
+ ├─ cont (offset =0)   ← core
+ │    └─ block          ← content
+ └─ block (offset >0)   ← post-context
 ```
 ---
 
@@ -318,21 +318,21 @@ Given the same snapshot, all implementations MUST produce identical serialized c
 3. **Active Head (`^ah`)** — rendered last (in-progress content).
 
 ### 12.3 Turn Layout
-Within each `mt` (or `^ah`):
-1. Pre-context (`offset < 0`) — all `cb` children.  
-2. Core container (`mc @ offset=0`) — serialized as the main message body.  
-3. Post-context (`offset > 0`) — all `cb` children.
+Within each `seg` (or `^ah`):
+1. Pre-context (`offset < 0`) — all `block` children.  
+2. Core container (`cont @ offset=0`) — serialized as the main message body.  
+3. Post-context (`offset > 0`) — all `block` children.
 
 ### 12.4 Roles
-- Each `cb` MAY carry a `role` (e.g., `"user"`, `"assistant"`, `"tool"`, `"system"`).  
+- Each `block` MAY carry a `role` (e.g., `"user"`, `"assistant"`, `"tool"`, `"system"`).  
 - Roles MUST be preserved and mapped consistently to provider schemas.  
 - If no role is given, default: `"system"` for `^sys`, `"user"` for turns.
 
 ### 12.5 Serialization Units
-Each `cb` serializes to an object:
+Each `block` serializes to an object:
 ```json
 {
-  "id": "cb:u1",
+  "id": "block:u1",
   "role": "user",
   "kind": "text",
   "content": "Hello!"
@@ -383,7 +383,7 @@ Given this example snapshot structure at `@t0`:
         "id": "sys-1",
         "nodeType": "^sys",
         "children": [
-          {"id": "cb:sysA", "role": "system", "kind": "text", "offset": 0, "content": "You are a helpful assistant."}
+          {"id": "block:sysA", "role": "system", "kind": "text", "offset": 0, "content": "You are a helpful assistant."}
         ]
       },
       {
@@ -391,17 +391,17 @@ Given this example snapshot structure at `@t0`:
         "nodeType": "^seq",
         "children": [
           {
-            "id": "mt:1",
-            "nodeType": "mt",
+            "id": "seg:1",
+            "nodeType": "seg",
             "children": [
-              {"id": "cb:u1", "role": "user", "kind": "text", "offset": 0, "content": "Hello"}
+              {"id": "block:u1", "role": "user", "kind": "text", "offset": 0, "content": "Hello"}
             ]
           },
           {
-            "id": "mt:2",
-            "nodeType": "mt",
+            "id": "seg:2",
+            "nodeType": "seg",
             "children": [
-              {"id": "cb:a1", "role": "assistant", "kind": "text", "offset": 0, "content": "Hi! How can I help?"}
+              {"id": "block:a1", "role": "assistant", "kind": "text", "offset": 0, "content": "Hi! How can I help?"}
             ]
           }
         ]
@@ -410,7 +410,7 @@ Given this example snapshot structure at `@t0`:
         "id": "ah-1",
         "nodeType": "^ah",
         "children": [
-          {"id": "cb:u2", "role": "user", "kind": "text", "offset": 0, "content": "Summarize the above."}
+          {"id": "block:u2", "role": "user", "kind": "text", "offset": 0, "content": "Summarize the above."}
         ]
       }
     ]
@@ -422,10 +422,10 @@ The provider thread serialization MUST be in this exact order (regions: `^sys` �
 
 ```json
 [
-  {"id": "cb:sysA", "role": "system", "kind": "text", "content": "You are a helpful assistant."},
-  {"id": "cb:u1",  "role": "user",   "kind": "text", "content": "Hello"},
-  {"id": "cb:a1",  "role": "assistant", "kind": "text", "content": "Hi! How can I help?"},
-  {"id": "cb:u2",  "role": "user",   "kind": "text", "content": "Summarize the above."}
+  {"id": "block:sysA", "role": "system", "kind": "text", "content": "You are a helpful assistant."},
+  {"id": "block:u1",  "role": "user",   "kind": "text", "content": "Hello"},
+  {"id": "block:a1",  "role": "assistant", "kind": "text", "content": "Hi! How can I help?"},
+  {"id": "block:u2",  "role": "user",   "kind": "text", "content": "Summarize the above."}
 ]
 ```
 
@@ -445,7 +445,7 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
         "id": "sys-2",
         "nodeType": "^sys",
         "children": [
-          {"id": "cb:sysB", "role": "system", "kind": "text", "offset": 0, "content": "System header B"}
+          {"id": "block:sysB", "role": "system", "kind": "text", "offset": 0, "content": "System header B"}
         ]
       },
       {
@@ -453,12 +453,12 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
         "nodeType": "^seq",
         "children": [
           {
-            "id": "mt:10",
-            "nodeType": "mt",
+            "id": "seg:10",
+            "nodeType": "seg",
             "children": [
-              {"id": "cb:pre1",  "role": "system",   "kind": "text",   "offset": -1, "content": "Pre-context hint"},
-              {"id": "cb:core1", "role": "user",     "kind": "text",   "offset": 0,  "content": "Hello with context"},
-              {"id": "cb:post1", "role": "tool",     "kind": "result", "offset": 1,  "content": "status: ok"}
+              {"id": "block:pre1",  "role": "system",   "kind": "text",   "offset": -1, "content": "Pre-context hint"},
+              {"id": "block:core1", "role": "user",     "kind": "text",   "offset": 0,  "content": "Hello with context"},
+              {"id": "block:post1", "role": "tool",     "kind": "result", "offset": 1,  "content": "status: ok"}
             ]
           }
         ]
@@ -467,9 +467,9 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
         "id": "ah-2",
         "nodeType": "^ah",
         "children": [
-          {"id": "cb:pre2",  "role": "system",   "kind": "text",   "offset": -1, "content": "AH pre"},
-          {"id": "cb:core2", "role": "user",     "kind": "text",   "offset": 0,  "content": "Working..."},
-          {"id": "cb:post2", "role": "assistant", "kind": "text",   "offset": 1,  "content": "Interim note"}
+          {"id": "block:pre2",  "role": "system",   "kind": "text",   "offset": -1, "content": "AH pre"},
+          {"id": "block:core2", "role": "user",     "kind": "text",   "offset": 0,  "content": "Working..."},
+          {"id": "block:post2", "role": "assistant", "kind": "text",   "offset": 1,  "content": "Interim note"}
         ]
       }
     ]
@@ -481,13 +481,13 @@ The provider thread serialization MUST be in this exact order (regions: `^sys` �
 
 ```json
 [
-  {"id": "cb:sysB",  "role": "system",   "kind": "text",   "content": "System header B"},
-  {"id": "cb:pre1",  "role": "system",   "kind": "text",   "content": "Pre-context hint"},
-  {"id": "cb:core1", "role": "user",     "kind": "text",   "content": "Hello with context"},
-  {"id": "cb:post1", "role": "tool",     "kind": "result", "content": "status: ok"},
-  {"id": "cb:pre2",  "role": "system",   "kind": "text",   "content": "AH pre"},
-  {"id": "cb:core2", "role": "user",     "kind": "text",   "content": "Working..."},
-  {"id": "cb:post2", "role": "assistant", "kind": "text",   "content": "Interim note"}
+  {"id": "block:sysB",  "role": "system",   "kind": "text",   "content": "System header B"},
+  {"id": "block:pre1",  "role": "system",   "kind": "text",   "content": "Pre-context hint"},
+  {"id": "block:core1", "role": "user",     "kind": "text",   "content": "Hello with context"},
+  {"id": "block:post1", "role": "tool",     "kind": "result", "content": "status: ok"},
+  {"id": "block:pre2",  "role": "system",   "kind": "text",   "content": "AH pre"},
+  {"id": "block:core2", "role": "user",     "kind": "text",   "content": "Working..."},
+  {"id": "block:post2", "role": "assistant", "kind": "text",   "content": "Interim note"}
 ]
 ```
 
@@ -498,5 +498,20 @@ Independent implementations MUST reproduce these bytes for the given snapshot.
 - Structural invariants (e.g., depth, offset, placement, canonical order) apply identically in the working state and in snapshots.  
 - Temporal invariants (e.g., `age`, `born_turn`, TTL/cadence projection rules) are only meaningful in snapshots (turns).  
 - The working state has no time‑derived properties; it is free to mutate until commit, subject to structural and validation rules.  
+
+## 14. Selector Validation Rules
+
+- Working State (no `@t`):
+  - `{}` and `[]` act as filters only; `age` and `born_turn` are invalid.
+  - Edits are permitted: `{}` can assign identity; `[]` can assign lifecycle; comparisons are invalid during edit operations.
+- Turns (`@t…`): read-only; edit-intent selectors MUST error.
+- Uniqueness:
+  - `#key` MUST resolve to ≤1 node; duplicates MUST raise `AmbiguousKey` (or equivalent).
+  - `{ id="…" }` uses equality only; if both `key` and `id` are present and mismatch, error `MismatchError`.
+- Deep search:
+  - `? { … }` is single-step.
+  - `?? { … }` is recursive (preorder by default).
+  - Chaining `? ?` is invalid.
+- After `dN`: entering `seg` is implicit; write `seg{…}` only when filtering/operating on the `seg` node itself.
 
 [← 01-architecture](01-architecture.md) | [↑ Spec Index](../README.md) | [→ 03-lifecycle-ttl](03-lifecycle-ttl.md)
