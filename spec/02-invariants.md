@@ -24,9 +24,38 @@ Prior to commit (within a cycle), implementations MAY re‑parent any node acros
 At commit, region placement is evaluated against invariants. Between snapshots, re‑parenting is observable via diffs (§9.3). Implementations SHOULD realize cross‑region relocations by add/remove operations that yield identical rendered bytes at commit.  
 Note: Cross‑region movement is observationally equivalent to remove+add, not an in‑place mutation; in‑place region changes MUST NOT be observable across snapshots.
 
+### 2.4 Global Depth Axis (Normative)
+
+There is one global integer axis `depth = d ∈ ℤ` that addresses all top-level containers:
+
+- `d = 0` → the Active Turn container (the in-progress turn)
+- `d ≥ 1` → historical turns in commit order; `d = 1` is the most recent committed turn, `d = 2` the one before it, etc.
+- `d = -1` → the System container (implementation-/provider-owned)
+- (Reserved) `d ≤ -2` → reserved for future system strata; MUST NOT be used by userland without explicit extension.
+
+### 2.5 Region Aliases (Normative)
+
+The symbols `^ah`, `^seq`, and `^sys` are **pure aliases** over `depth`:
+
+- `^ah` ≡ `depth(0)`
+- `^seq` ≡ the set `{ depth(n) | n ≥ 1 }`
+- `^sys` ≡ `depth(-1)`
+
+These aliases are **syntactic sugar only**. They MUST NOT confer capabilities, mutability, or permissions different from their `depth(...)` equivalents.
+
+### 2.6 Equivalence Law (Normative)
+
+For any selector `S`, replacing:
+- `^ah` with `depth(0)`,
+- any `^seq` reference to a specific turn with `:depth(n)` for some `n ≥ 1`,
+- `^sys` with `depth(-1)`
+
+MUST select the identical node(s). Implementations MUST validate this equivalence.
+
+
 ## 3. Node Identity and Headers
-### 3.1 Stable ID
-Each node MUST have a stable `id` (hash or UUID). The `id` MUST NOT change during the node's lifetime within a snapshot. Implementations MAY assign new IDs during internal rematerialization as long as final snapshots are byte-stable.
+### 3.1 Stable ID (Global Uniqueness)
+Each node MUST have a stable `id` (hash or UUID). The `id` MUST NOT change during the node's lifetime within a snapshot, and MUST be globally unique across the addressable history (no reuse across live snapshots). Implementations MAY assign new IDs during internal rematerialization as long as final snapshots are byte-stable.
 
 ### 3.2 Required Headers
 Each node MUST include:  
@@ -69,6 +98,11 @@ Implementations MAY define user types (e.g., `cb:summary`). Selectors MUST still
 - Serialization: Attributes MUST serialize canonically and deterministically; unknown attributes MUST NOT affect canonical ordering.
 - Reserved names: Implementations MUST NOT redefine `id`, `nodeType`, `offset`, `ttl`, `priority`, `cycle`, `created_at_ns`, `created_at_iso`, `creation_index`, `content_hash`.
 
+### 3.6 Keys, Overlap, and ODI (Normative)
+- **Key multiplicity**: The same `key` attribute MAY appear on multiple live nodes within a single snapshot (temporal overlap from cadence and TTL).
+- **Overlap Demotion Invariant (ODI)**: If a new instance with `key=K` is materialized while a prior `key=K` instance is still alive, placement MUST satisfy `depth(prev_id) > depth(new_id)` for all prior live instances, under Universal Depth (03 – Lifecycle §3.6). Engines MUST either auto‑demote prior instances to satisfy ODI or reject the placement with an error (e.g., `OverlapWouldViolateODI`).
+- **Determinism (per‑key selection and rendering of same‑key sets)**: When selecting among multiple instances with the same `key` without an explicit ordering directive, the canonical order MUST be: primary `depth` descending, secondary `created_at_ns` descending, then `creation_index` descending, and finally `id` ascending as a stable tie‑breaker.
+
 ## 4. Placement and Ordering
 This section is the normative, canonical source for placement (offset semantics and core placement) and sibling ordering. Other chapters MUST reference this section and MUST NOT redefine these rules.
 ### 4.1 Offsets
@@ -105,6 +139,8 @@ Siblings MUST be ordered by this canonical sequence:
 3. `creation_index` ascending,
 4. `id` lexicographic.
 
+Note: Canonical sibling ordering governs structural traversal and rendering. Per‑key selection determinism (see §3.6) governs how to order or choose among multiple overlapping instances of the same logical `key`.
+
 ### 4.4 Monotonicity Guarantees
 Implementations MUST ensure:
 - **Within a single cycle**: `created_at_ns` values MUST be strictly monotonic (no duplicates)
@@ -129,7 +165,7 @@ Prior to commit, nodes MAY be re‑parented (moved to a different parent) provid
 2. The region container `^sys` is not re‑parented.
 3. Conformance is evaluated on snapshot structure and serialized bytes, not internal mutation mechanics.
 
-After sealing, `mc@0` cores are immutable (§6.4). Non‑core nodes MAY be attached or detached relative to sealed turns by adding/removing nodes (e.g., post‑context attachments); sealed records are not mutated in place.
+After sealing, `mc[offset=0]` cores are immutable (§6.4). Non‑core nodes MAY be attached or detached relative to historical turns by adding/removing nodes (e.g., post‑context attachments); sealed records are not mutated in place.
 
 ## 5. Lifecycle
 ### 5.1 TTL
@@ -159,13 +195,14 @@ There MUST be at most one `^ah` per snapshot.
 ### 6.2 Sealing
 At commit, `^ah` is sealed into `^seq` as a new `mt`. The sealed `mc` is immutable.
 
+No sealing occurs during the Active Turn (at). Sealing only happens at the commit boundary, when ^ah becomes a new mt under ^seq.
+
 ### 6.3 Depth
-In `^seq`, depth counts newest→oldest.  
-`depth=1` = most recent sealed turn.  
-`^ah` is not depth-addressable.
+Depth is globally defined as in §2.4. In `^seq`, depth counts newest→oldest (`1` = most recent historical turn).  
+The Active Turn is **depth-addressable** as `depth(0)` (alias `^ah`).
 
 ### 6.4 Immutability
-Sealed cores (`mc @ offset=0`) MUST NOT be mutated. Snapshots are immutable records. Non‑core nodes (pre/post context, summaries, redactions, corrections, containers) MAY be added or removed in subsequent cycles, including attachments targeting sealed turns, via new nodes and lifecycle—never by mutating sealed bytes in place.
+Sealed cores (`mc @ offset=0`) MUST NOT be mutated. Snapshots are immutable records. Non‑core nodes (pre/post context, summaries, redactions, corrections, containers) MAY be added or removed in subsequent cycles, including attachments targeting historical turns, via new nodes and lifecycle—never by mutating sealed bytes in place.
 
 ## 7. Pruning (Optional)
 **Preface.** Pruning is **optional**. If pruning is disabled, an implementation remains conformant by
@@ -203,6 +240,10 @@ Snapshots are addressable:
 - `@t-1` previous
 - `@cN` absolute cycle
 
+#### `@t0` vs Active Turn (Normative)
+- `@t0` designates the most recent **committed** snapshot. Snapshots (including `@t0`) are immutable records and exist only post‑commit.
+- The live editable scope during a cycle is addressed by `depth(0)` (Active Turn), not by `@t0`. No region at `depth ≤ 0` is immutable by this specification.
+
 ### 8.5 Snapshot Boundary (Normative)
 See Lifecycle §7 for Commit Sequence (Normative). A snapshot MUST serialize to the provider‑bound bytes for that cycle. Persistence MAY be asynchronous; equivalence is judged on logical content and rendered bytes.
 
@@ -221,7 +262,7 @@ Selectors MUST support:
 
 ### 9.3 Diffs
 `ctx.diff(A,B,selector)` MUST detect changes by node `id` and report both content and structural changes. At minimum, diffs SHOULD include:
-- Component lifecycle: `components_added`, `components_removed`, field‑wise `components_modified` (including `ttl` changes and header changes per §3.5);
+- Lifecycle changes: `added`, `removed`, and field‑wise `changed` (including `ttl` changes and header changes per §3.5);
 - Structural moves (re‑parenting):
   - In the old parent: `children_removed += <child_id>`
   - In the new parent: `children_added += <child_id>`
@@ -239,7 +280,7 @@ Implementations MAY provide richer change models, but MUST preserve determinism 
 An implementation is conformant if:
 1. Regions `^sys`, `^seq`, `^ah` exist.
 2. Nodes carry required headers.
-3. Each turn has exactly one `mc@0`.
+3. Each turn has exactly one `mc[offset=0]`.
 4. Ordering rules are enforced.
 5. TTL expiry + cascade occur at commit.
 6. Sealed cores are immutable; snapshots are immutable.
@@ -248,6 +289,9 @@ An implementation is conformant if:
 9. Selectors are pure and complete.
 10. Diffs compare by `id`.
 11. Invalid placements are rejected.
+
+### No Active-Cycle Immutability (Normative)
+- Conformant implementations MUST allow edits at `depth ≤ 0` during the active cycle, subject to invariants and authorization. Any blanket “immutable at t0/at/`^sys`/`^ah`” behavior is non‑conformant.
 
 ---
 
@@ -331,6 +375,7 @@ Given this example snapshot structure at `@t0`:
 
 ```json
 {
+  "spec_version": "PACT/0.1.0",
   "root": {
     "id": "root-1",
     "children": [
@@ -392,6 +437,7 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
 
 ```json
 {
+  "spec_version": "PACT/0.1.0",
   "root": {
     "id": "root-2",
     "children": [
@@ -446,5 +492,11 @@ The provider thread serialization MUST be in this exact order (regions: `^sys` �
 ```
 
 Independent implementations MUST reproduce these bytes for the given snapshot.
+
+## 13. Temporal vs Structural
+
+- Structural invariants (e.g., depth, offset, placement, canonical order) apply identically in the working state and in snapshots.  
+- Temporal invariants (e.g., `age`, `born_turn`, TTL/cadence projection rules) are only meaningful in snapshots (turns).  
+- The working state has no time‑derived properties; it is free to mutate until commit, subject to structural and validation rules.  
 
 [← 01-architecture](01-architecture.md) | [↑ Spec Index](../README.md) | [→ 03-lifecycle-ttl](03-lifecycle-ttl.md)

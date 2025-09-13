@@ -13,6 +13,8 @@ Snapshots make context state reproducible, diff-able, and auditable.
 Each cycle produces exactly one snapshot.  
 A snapshot is the PACT tree at the post‑commit boundary per Lifecycle §7.
 
+Snapshots are one‑to‑one with turns: every turn is a committed snapshot of the entire context tree. A snapshot fixes the state of all segments in `^seq`, the system container (`^sys`), and the active head (`^ah`) at commit time. Snapshots are immutable.
+
 ### 2.1.1 Snapshot Boundary (Normative)
 The snapshot boundary follows the Commit Sequence (Normative) in Lifecycle §7. For cycle `N`, the snapshot at `@t0` MUST re‑serialize to exactly the provider input bytes for that cycle. Implementations MAY persist snapshots asynchronously, provided the logical content equals the post‑commit state used to produce those bytes.
 
@@ -35,6 +37,14 @@ Notes:
 
 - Negative indices are relative to the current snapshot: `@t-1` is the immediate previous snapshot, `@t-2` two cycles back, etc.
 - `..` and `:` MUST be treated as interchangeable range operators and produce identical results.
+
+### 2.4 Temporal Lens
+
+- `@t0` = the latest committed turn (snapshot).  
+- `@t-1`, `@t-2`, … = older turns.  
+- `@t0..@t-3` = a range of turns, inclusive.  
+- If no `@t` is given, selectors apply to the working state (the live active head).  
+- Ranges, `@mode`, and time‑derived facets are only valid on snapshots, not the working state.
 
 ---
 
@@ -106,16 +116,44 @@ Intra-active-turn moves MAY appear as removed + added when implementations remat
 Selectors MAY reference multiple snapshots using ranges. For example:
 
 ```
-ctx.select("@t-5..-1 ^ah .cb")
+ctx.select("@t-5:@t-1 ^ah .cb")
 ```
 
-This MUST select across snapshots from `t-5` through `t-1` inclusive. The following is equivalent and MUST return identical results:
+This MUST select across snapshots from `t-5` through `t-1` inclusive and return a RangeDiffLatestResult (see Selectors §3.7.1). The following is equivalent and MUST return identical results:
 
 ```
-ctx.select("@t-5:-1 ^ah .cb")
+ctx.select("@t-5:@t-1 ^ah .cb")
 ```
 
-## 6. Conformance Checklist
+## 6. Mutations (Aligned with Universal Depth)
+
+This section defines mutation semantics against snapshots using Universal Depth (03 – Lifecycle §3.6). Mutations MUST preserve immutability of sealed bytes; history edits are expressed structurally.
+
+### 6.1 insert(selector, at=depth=k)
+- `k < 0` → insert into System space (depth<0). Requires authorization per implementation policy. This spec does not prescribe immutability for system nodes during the active cycle.
+- `k = 0` → insert into the Active Head (writable this episode).
+- `k > 0` → splice into sealed history at depth `k` (shift `[k..∞] → [k+1..∞]`).
+  - When inserting with `key=K`, if any live instances with `key=K` exist, enforce ODI such that every prior instance satisfies `depth(prev) < k`. Engines MUST auto‑demote prior instances or reject with `OverlapWouldViolateODI`.
+
+### 6.2 replace(selector, with=component)
+- For `depth > 0`, replacements MUST be non‑destructive: record an overlay or perform a splice that preserves prior bytes; sealed records are not mutated in place.
+- For `depth = 0`, replacements mutate the current episode’s writable content.
+
+### 6.3 move(selector, to_depth=k)
+- `>0 → >0` ⇒ splice‑out from original depth and splice‑in at `k` (shifting as needed).
+- `0 → >0` ⇒ early seal of moved nodes into history.
+- `any → <0` ⇒ forbidden unless system‑capable (policy‑gated).
+  - For overlapping instances sharing the same `key`, moves MUST preserve ODI; engines auto‑adjust or reject if violated.
+
+### 6.4 delete(selector)
+- `depth > 0` ⇒ record a redaction marker (non‑destructive history surgery).
+- `depth = 0` ⇒ drop immediately (pre‑commit space).
+- `depth < 0` ⇒ forbidden by default (policy‑gated).
+  - Deletions do not affect ODI directly; normal TTL/commit rules apply.
+
+Implementations SHOULD realize large-scale history surgery via logical indirection (e.g., an index) rather than physical renumbering of historical depths.
+
+## 7. Conformance Checklist
 
 An implementation is conformant if:
 

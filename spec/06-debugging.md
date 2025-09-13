@@ -72,7 +72,7 @@ Examples:
 # all pre-context blocks in active head
 ctx.select("^ah :pre .cb")
 
-# last two sealed turns, assistant responses only
+# last two historical turns, assistant responses only
 ctx.select("^seq .mt:depth(1,2) .cb[role='assistant']")
 
 # expired or soon-to-expire nodes

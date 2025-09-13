@@ -38,7 +38,7 @@ ctx.select("^seq .mc")
 ctx.select("^root .cb")
 
 // Namespaced user types and kinds
-ctx.select("^seq .cb:summary")            // type token (nodeType="cb:summary")
+ctx.select("^seq .cb:summary")            // type token (nodeType="cb", kind="summary")
 ctx.select("^root .cb[kind='tool_call']") // kind is an attribute
 ```
 
@@ -63,10 +63,10 @@ ctx.select("^root .cb[role='tool']")
 
 ### Recent Turns
 ```javascript
-// Most recent sealed turn
+// Most recent historical turn
 ctx.select("^seq .mt:depth(1)")
 
-// Last 3 sealed turns
+// Last 3 historical turns
 ctx.select("^seq .mt:depth(1,2,3)")
 
 // Last turn's user message

@@ -6,13 +6,17 @@
 >
 > | Term | Nature | Meaning |  
 > |------|--------|---------|  
-> | **Active Head (`^ah`)** | Structural | The container node for the in-progress turn. Sealed → `mt` at commit. Not inherently mutable. |  
+> | **Active Head (`^ah`)** | Structural | The container node for the in-progress turn. On commit, ^ah becomes an mt under ^seq. Structural only; mutability is governed by the Active Turn (`at`). During `at`, nodes under depth(0) are editable subject to invariants. |  
 > | **Active Turn (`at`)** | Temporal | The editable scope of the current cycle. Governs mutability across regions until sealing. |
 >
 > **Terminology Lint (non-normative)**  
 > When writing spec text, refer to **`^ah`** for structure and **`at`** for editability.  
 > Phrases like “`^ah` is editable/mutable” SHOULD be avoided; prefer  
 > “during the Active Turn (`at`), content is editable until sealing.”
+
+> **Terminology Clarifier — Cadence vs Cycle**  
+> - **Cadence**: Node‑level materialization frequency (per episode); renamed from prior drafts that used “cycle” for this concept.  
+> - **Cycle/Episode**: The commit iteration index for the whole system. Header `cycle` denotes the introducing commit’s index and is distinct from `cadence`.
 
 ## 1. Purpose
 This section defines the **temporal semantics** of PACT:
@@ -49,19 +53,56 @@ The snapshot for cycle `N` MUST serialize to the exact provider‑bound bytes fo
 
 ---
 
-## 3. TTL (Time To Live)
+## 3. TTL (Time To Live) and Cadence
 ### 3.1 TTL Semantics
-Each node has a `ttl` field interpreted in cycles:
-- `None` → persistent (never expires automatically)
+Each node has a `ttl` field interpreted in episodes (commit boundaries):
+- `null` → persistent (no TTL-based expiry)
 - `0` → expires at the next commit boundary
-- `N > 0` → persists for N additional cycles after creation
+- `N > 0` → persists for N additional episodes after creation
+- `N < 0` → INVALID at evaluation time; MUST be dropped
 
 ### 3.2 Evaluation
-TTL is checked at **commit**. Expired nodes MUST be removed before pruning.
+- TTL is decremented per episode at **commit time** for nodes with `depth > 0` (sealed history).
+- Nodes at `depth = 0` with `ttl = 0` MUST be dropped pre‑commit (do not seal into history).
+- Nodes at `depth < 0` (system) do not decrement by default.
 
 ### 3.3 Decrement vs Check
-Implementations MAY store TTL as “remaining cycles” (decrement each commit) or as “expiry cycle” (check current cycle against expiry).  
+Implementations MAY store TTL as “remaining episodes” (decrement each commit) or as “expiry episode” (check current episode against expiry).  
 Both are valid if semantics are preserved.
+
+### 3.4 Cadence (renamed from “cycle” frequency)
+`cadence ∈ ℕ⁺` (positive integers). The cadence controls materialization frequency of instances for a logical `key`:
+- `cadence = 1` → materialize every episode
+- `cadence > 1` → materialize every Nth episode
+- `cadence = 0` → INVALID (reject configuration)
+
+### 3.5 Materialization Rule
+When a component’s `cadence` “fires” in an episode, the implementation MUST create a new instance for its logical `key`. Prior live instances remain until TTL expiry and MUST satisfy the Overlap Demotion Invariant (ODI) (02 – Invariants §3.6): all prior instances are placed at strictly deeper depth than the newest (`depth(prev) > depth(new)`). ODI MUST be enforced at materialization time; engines MUST auto‑demote prior instances to satisfy ODI or reject the operation (`OverlapWouldViolateODI`).
+
+Non‑normative guidance: `ttl = 1` indicates high‑salience ephemeral content (created this episode and not retained beyond sealing).
+
+### 3.6 Universal Depth (UD)
+Depth is a single, signed axis across all regions:
+
+- `d = -1` → System space (`^sys`), immutable by default
+- `d = 0` → Active Turn (`^ah`), writable during the current episode
+- `d ≥ 1` → Sealed history (`^seq`), newest = `1`
+- (Reserved) `d ≤ -2` → reserved for future system strata; userland MUST NOT use without explicit extension
+
+Commit transition `t → t+1` updates depths deterministically:
+- if `d ≥ 1`: `depth := depth + 1`
+- if `d = 0`: becomes `d = 1` (newly sealed)
+- if `d = -1`: unchanged
+
+TTL interaction under UD:
+- TTL decrements only for `d ≥ 1`.
+- `ttl = 0` at `d = 0` drops the node pre‑commit.
+
+Canonical render order (equivalent to ^sys → ^seq → ^ah):
+- `depth < 0` ascending (… −2, −1) → `depth > 0` descending (… 3, 2, 1) → `depth = 0` last.
+
+### 3.7 Lifecycle Fields Only
+No special tagging fields are introduced for lifecycle. Lifecycle is expressed solely via `cadence`, `ttl`, and depth placement. Engines MUST NOT auto‑tag components.
 
 ---
 
@@ -82,7 +123,7 @@ Nodes with live references MUST NOT be removed (expired or pruned). If liveness 
 ## 5. Sealing & Snapshots
 ### 5.1 Active Head
 There MUST be at most one `^ah` node per snapshot. At commit, the `^ah` is sealed
-into history as a new `mt` under `^seq`. Once sealed, the `mc@0` core is immutable.
+into history as a new `mt` under `^seq`. Once sealed, the `mc[offset=0]` core is immutable.
 `^ah` denotes **structure** only; it does not define what is editable.
 
 ### 5.2 Sealing & Snapshots
@@ -103,10 +144,28 @@ Given the same prior snapshots and the same set of non‑expired additions, the 
 - All nodes created during the cycle (in `^ah` or other regions) are editable until sealing.  
 - After sealing, further modifications MUST be expressed as new nodes, never by mutating sealed bytes.
 
+- Within the Active Turn (at), implementations MAY add, remove, reorder, or replace any nodes (including `mc[offset=0]` contents) across regions prior to commit, provided all structural invariants hold. PACT does not constrain developer workflows inside the active cycle; it only constrains the structure and the snapshot emitted at commit.
+
 This clarifies that editability is governed by `at`, while `^ah` is merely the structural container
 of the turn that will be sealed.
 
  
+
+## 5.6 Active Turn & Commit
+
+### Active Turn (at) Mutability
+- Within the Active Turn (`depth(0)`), implementations MAY add, remove, reorder, re-parent, or replace any nodes created in the current cycle (including `mc[offset=0]`) provided all structural invariants hold. PACT does not constrain developer workflows inside the active cycle; it constrains structure and the snapshot emitted at commit.
+- Writes to `^sys` (`depth < 0`) are authorization/policy-gated.
+ - During `at`, all nodes at `depth ≤ 0` (including `^ah` and `^sys`) are writable subject only to structural invariants and authorization.
+
+### Commit (Sealing)
+- No sealing occurs during the Active Turn. Sealing occurs only at the commit boundary.
+- On commit:
+  1) `depth(0)` materializes as a new `.mt:depth(1)` in `^seq` with `mc[offset=0]` bytes fixed (immutable).
+  2) All existing `.mt:depth(k)` shift to `.mt:depth(k+1)`.
+
+### Immutability
+- After commit, an `mt`’s `mc[offset=0]` bytes MUST NOT be mutated. Later changes are expressed via new nodes (e.g., overlays, redactions, summaries), not by in-place mutation of sealed bytes.
 
 ## 6. Attempts & Controls
 ### 6.1 Stop/Edit/Re‑Run
@@ -172,5 +231,32 @@ mt
 → mc core is immutable from this point onward.
 → If any removable containers become empty due to TTL expiry, they are removed in this commit (see 02 – Invariants §5.3.1).
 ---
+
+### 8.4 Ephemeral every episode (`cadence=1, ttl=1`) with ODI
+
+Key `K` emits a fresh instance each episode and expires immediately after sealing:
+
+Cycle t:
+^ah  └─ cb[key="K", ttl=1]
+
+Commit t→t+1:
+- Newest becomes `depth=1` (sealed)
+- Prior instances (if any) shift deeper (`1→2→…`) and satisfy ODI (`depth(prev) > depth(new)`).
+- `ttl` on sealed instances decrements; those that reach `0` expire and are removed.
+
+### 8.5 Periodic refresher (`cadence=3, ttl=∞`)
+
+Key `K` materializes at t0, t3, t6, … and never expires via TTL:
+
+- On a firing episode, create a new instance at `depth=0` that seals to `depth=1` at commit.
+- Prior copies remain and drift deeper (`2,3,…`).
+- Selecting the newest sealed instance: `^seq .mt:depth(1) .cb[key='K']`.
+## 9. Edge Cases & Policy
+
+- System mutability: Writes to `depth < 0` are policy‑gated and SHOULD emit audit events.
+- History surgery at scale: Prefer logical splices via indirection indexes; avoid physical renumbering of depths.
+- TTL at negative depths: Default `ttl = null`; finite TTL MAY be allowed for experimental/runtime hints.
+- AH phases: Phases remain as subslots of `depth = 0` (e.g., `:pre / :core / :post`); do not introduce new depths for phases.
+
 
 [← 02-invariants](02-invariants.md) | [↑ Spec Index](../README.md) | [→ 04-selectors](04-selectors.md)

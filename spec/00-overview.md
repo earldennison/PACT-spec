@@ -2,6 +2,7 @@
 
 # 00 – Overview
 
+
 ## What is PACT?
 
 **PACT (Positioned Adaptive Context Tree)** is a deterministic substrate for managing context in large language model (LLM) systems.  
@@ -35,7 +36,7 @@ PACT addresses this gap by formalizing the **structure of context itself**, inde
 1. **Tree structure**  
    The context is organized into a rooted tree with three top-level regions:  
    - `^sys`: System Header (persistent system instructions)  
-   - `^seq`: Sealed sequence of past turns (sealed turns’ cores are immutable)  
+   - `^seq`: Historical sequence of past turns (historical turns’ cores are immutable)  
    - `^ah`: Active Head (current in-progress turn)
 
 2. **Deterministic placement**  

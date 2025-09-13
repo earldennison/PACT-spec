@@ -16,7 +16,7 @@ This leads to:
 - Provider-specific quirks.
 
 **PACT treats structure as a first-class concept**:
-- Regions: `^sys` (system header), `^seq` (sealed turns), `^ah` (active head),
+- Regions: `^sys` (system header), `^seq` (historical turns), `^ah` (active head),
 - Canonical node types: `mt`, `mc`, `cb`,
 - Deterministic ordering: offset → created_at_ns → creation_index → id,
 - Lifecycle: cycles, TTL, sealing, cascading cleanup,

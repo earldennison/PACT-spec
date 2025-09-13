@@ -16,7 +16,7 @@ MUST (mark one):
 - [ ] Yes  [ ] No — Canonical sibling order enforced: `offset` → `created_at_ns` → `creation_index` → `id`.
 - [ ] Yes  [ ] No — TTL expiry + cascade at commit; sealed cores immutable; snapshots immutable.
 - [ ] Yes  [ ] No — If pruning is implemented, it is deterministic (**priority → age → id**).
-- [ ] Yes  [ ] No — Serialization has no side effects; diffs compare by `id`; invalid placements rejected.
+- [ ] Yes  [ ] No — Serialization has no side effects; diffs compare by `id`; Invalid selectors MUST raise errors.
 
 SHOULD (mark one):
 - [ ] Yes  [ ] No — Cross‑region relocations realized as remove+add (no observable in‑place region mutation across snapshots).
@@ -30,10 +30,10 @@ Reference: 02 – Invariants §§2–9, §11.
 
 MUST (mark one):
 - [ ] Yes  [ ] No — Are roots `^sys`, `^seq`, `^ah`, `^root` supported?
-- [ ] Yes  [ ] No — Are types `.mt`, `.mc`, `.cb` supported, and do `.cb:summary` and `[nodeType='cb:summary']` return identical results?
+- [ ] Yes  [ ] No — Are types `.mt`, `.mc`, `.cb` supported, and do `.cb:summary` and `[nodeType='cb'][kind='summary']` return identical results?
 - [ ] Yes  [ ] No — Do ID selectors `#<id>` match exactly (case‑sensitive)?
 - [ ] Yes  [ ] No — Are pseudos `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)` implemented, including `:depth(n1,n2,...)` lists and `:depth(n1-n2)` ranges?
-- [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [priority] [cadence] [created_at_ns] [created_at_iso] [nodeType] [id] [role] [kind]` supported with `= != < <= > >=` and correct numeric/string semantics?
+- [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [role] [kind]` supported with `= != < <= > >=` and correct numeric/string semantics?
 - [ ] Yes  [ ] No — Are combinators descendant (`A B`) and child (`A > B`) supported?
 - [ ] Yes  [ ] No — Are `@t0`, `@t-1`, `@cN`, `@*` supported, with default `@t0` if omitted and no requirement for explicit `@t0`?
 - [ ] Yes  [ ] No — Are snapshot ranges `@tA..B` and `@tA:B` supported with inclusive semantics, and do both operators (`..`, `:`) produce identical results?
@@ -81,6 +81,50 @@ Reference: 07 – Debugging and Inspection §2–§7.
 
 At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compaction (if implemented) in canonical order; 3. Seal `^ah` into a new `mt` under `^seq`; 4. Produce snapshot `@t0`.
 
+---
+
+## F. Region Alias Equivalence
+
+To claim compliance with Region Alias Equivalence, an implementation MUST:
+
+1) Accept `depth(0)` wherever `^ah` is accepted and produce identical selections.  
+2) Accept `.mt:depth(n)` for any historical turn `n ≥ 1` wherever `^seq` addressing is used.  
+3) Accept `depth(-1)` wherever `^sys` is accepted (subject to authorization).  
+4) Provide a conformance test that round-trips alias ↔ depth forms with identical results.
+
+---
+
+## Annex – Additional Compliance Items
+
+### Lifecycle — MUST
+1) Active Turn permits arbitrary edits (add/remove/re-parent/replace) within invariants.  
+2) Commit produces a new `.mt:depth(1)`; prior `.mt:depth(k)` shift to `k+1`.  
+3) `mc[offset=0]` bytes are immutable after commit.
+
+### Selectors — MUST
+1) Depth qualifier `.mt:depth(n)` and standalone `depth(n)` are supported.  
+2) SnapshotRange yields `RangeDiffLatestResult` by default.  
+3) No alternate “legacy” result shapes are required or recognized pre‑v1.
+
+---
+
+## Annex – Editorial Process & Conformance Notes
+
+### Single-Source Normative References
+- Normative definitions for the depth axis, alias equivalence, and commit/immutability reside in:
+  - 01 – Architecture / Regions & Addressing
+  - 04 – Lifecycle / Active Turn & Commit
+  - 03 – Selectors & Grammar / Overview + Snapshot & Range Semantics
+- Other chapters MUST link to these as “Normative Reference: see …” rather than re‑stating. Remove duplicate normative paragraphs and replace with a one‑line normative reference.
+
+Action
+- DELETE any duplicated lifecycle checklists and selector fixtures that restate the above norms; replace each with:
+  “Normative Reference: see the canonical section listed in ‘Single‑Source Normative References.’”
+
+### Pre‑v1 Policy (Normative Reminder)
+- No Migration Plan: The spec defines only the current normative behavior. Historical/legacy modes are NOT part of conformance pre‑v1.
+- Change Control: Editors MAY introduce breaking changes that supersede prior drafts. Conformance is always evaluated against the latest draft.
+
 [← 08-reference-implementations](08-reference-implementations.md) | [↑ Spec Index](../README.md)
 
 
@@ -90,4 +134,4 @@ At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compacti
 Runtime configuration MAY include:
 - select_range_returns_diff = true  (default)
 
-If a deployment needs legacy behavior, setting false causes range selects to return a flat, ordered list of IDs as in prior versions; `ctx.rangeDiffLatest(selector, opts?)` SHOULD be provided as a separate API for diffs during the migration period.
+ 

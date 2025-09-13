@@ -6,11 +6,22 @@ A deterministic substrate for LLM context: governed structure, lifecycle, and re
 **Region**  
 Top‑level partition of the context tree: **^sys** (system header), **^seq** (sealed sequence of turns), **^ah** (active head; convenience alias), **^root** (root container).
 
-**Turn (`mt`)**  
-A sealed conversational step in **^seq**. Contains pre/core/post context. Once sealed, the core is immutable.
+**Turn**  
+A committed snapshot of the entire context tree.  
+- Each commit produces exactly one new turn.  
+- A turn is immutable.  
+- A turn contains the system container (`^sys`), the sequence of structural segments (`^seq`), and the active head (`^ah`) as it was at commit.  
+- Developers use “turn” only to mean the full snapshot, never an internal node.
+
+**Segment (`seg`)**  
+Structural container under `^seq`.  
+- Each segment holds exactly one core (`mc`) plus optional pre-context (`cb` with `offset < 0`) and post-context (`cb` with `offset > 0`).  
+- Segments are ordered strictly by depth index (`d1`, `d2`, …).  
+- At commit, the active head (`d0`) becomes a new segment appended to `^seq` in the new turn.  
+- Segments are structural only; they carry no temporal meaning.
 
 **Active Head (`^ah`)**  
-The in‑progress turn (depth 0) that will be sealed into **^seq**. Mutable until sealed.
+The working state container at `d0` (editable). At commit, `^ah` becomes a new segment appended to `^seq` in the new turn.
 
 **MessageContainer (`mc`)**  
 Core container at **`offset = 0`** within a turn. Pre‑context attaches at negative offsets; post‑context at positive offsets.
@@ -20,15 +31,19 @@ Leaf/content node (text, tool call, tool result, media, document, etc.). Provide
 
 **NodeType**  
 A string that classifies a node.
-- **Canonical types**: `mt`, `mc`, `cb` — required for interoperability.  
+- **Canonical types**: `seg`, `mc`, `cb` — required for interoperability.  
 - **User‑assigned types**: Implementations or developers may define namespaced types (e.g., `cb:summary`, `cb:sql_query`, `custom:note`).  
-Selectors MUST be able to target both canonical and user‑assigned types (e.g., `.cb` or `[nodeType="cb:summary"]`).
+Selectors MUST be able to target both canonical and user‑assigned types (e.g., `.cb` or `[nodeType="cb"][kind="summary"]`).
 
 **Relative Offset (`offset`)**  
-Integer position relative to the core: `<0` pre‑context, `0` core, `>0` post‑context.
+Position of children inside a segment: `< 0` = pre‑context `cb`, `= 0` = `mc` core, `> 0` = post‑context `cb`.
 
 **Depth**  
-Index into **^seq** newest→oldest: `depth=1` is most recent sealed turn; `depth=2` the one before, etc. (Active head is addressed via `^ah`.)
+Structural index inside `^seq` within a turn.  
+- `d0` = active head (working state, editable).  
+- `d1`, `d2`, … = the first, second, … segment inside `^seq`.  
+- `d-1` = system container.  
+Depth is structural only; it is not a synonym for turn.
 
 **Cycle**  
 One rebuild/commit iteration of the tree. TTL expiry and snapshots align to cycles.
@@ -37,7 +52,10 @@ One rebuild/commit iteration of the tree. TTL expiry and snapshots align to cycl
 Cycles a node persists. `None` = persistent; `0` = expires after current cycle; `N` = lasts N cycles.
 
 **Snapshot**  
-Byte‑stable state of the tree after commit. Addressed as `@t0` (current), `@t-1` (previous), or `@cN` (absolute cycle number).
+The frozen picture of the entire tree taken at commit.  
+- Snapshots are immutable.  
+- Snapshots are one‑to‑one with turns (every turn is a snapshot).  
+- A snapshot fixes the state of all segments in `^seq`, the system container, and the active head at commit time.
 
 **History**  
 The immutable timeline of snapshots. History is composed of successive snapshot records; snapshots themselves are immutable artifacts.
@@ -63,13 +81,19 @@ Deterministic enforcement of resource limits (tokens/nodes/depth/region). Order:
 Atomic update that produces a snapshot. Rendering has no side effects; same snapshot → identical provider‑thread bytes.
 
 **Context Selectors (`ctx.select`)**  
-CSS‑like query language for space (**regions/turns/offsets**) and time (**snapshots**). Supports `^roots`, `#id`, `.type` (canonical or user‑assigned), combinators, pseudos, and attributes.
+CSS‑like query language for space (**regions/segments/offsets**) and time (**turns/snapshots**). Supports `^roots`, `#id`, `.type` (canonical or user‑assigned), combinators, pseudos, and attributes.
 
 **Diff (`ctx.diff`)**  
 Snapshot delta for a selector: `{added, removed, changed}` by node ID (field‑wise change report recommended). Structural changes SHOULD track re‑parenting explicitly: in the old parent `children_removed += id`, in the new parent `children_added += id`; implementers MAY also include a child‑level `parent_changed {previous_parent_id, new_parent_id}` signal.
 
+**RangeDiffLatestResult**  
+Result shape for range selects. Includes `query`, resolved `snapshots` sorted newest→oldest, pairwise `diffs` with `added`/`removed`/`changed`, and optional `mode`/`limits` metadata. See Selectors §3.7.
+
 **Re‑parenting**  
-Changing a node’s parent. Prior to commit, any node MAY be re‑parented except `mt` (message turns) and the region container `^sys`. After sealing, cores (`mc@0`) are immutable; non‑core nodes MAY still be attached/detached across turns via new nodes and lifecycle rules.
+Changing a node’s parent. Prior to commit, any node MAY be re‑parented except `mt` (message turns) and the region container `^sys`. After sealing, cores (`mc[offset=0]`) are immutable; non‑core nodes MAY still be attached/detached across turns via new nodes and lifecycle rules.
+
+**Attempt**  
+A provider call execution within the Active Turn. Tracked in telemetry with fields like `attempt_id`, `cycle_id`, `status`, timestamps, provider/model, params hash, token counters, and optional error. See Lifecycle §6.
 
 **Provider Thread**  
 Provider‑agnostic linearization (ClientRequest / ProviderResponse) derived deterministically from the PACT tree.
