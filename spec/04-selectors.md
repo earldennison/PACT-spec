@@ -31,7 +31,7 @@ Canonical order for selectors:
 @time  (position)  { attributes }  [ behavior ]  @controls
 ```
 
-- Omit `@time` ⇒ Working State (live Active Head). Use `@tK` for snapshots or ranges, and `@history` for `@t0..@t-*`.
+- Time Prefix: Canonical form uses an explicit `@time`. Parsers MUST interpret omitted time as `@t0`. Use `@t0` (active, unsealed) or `@t-1`, `@t-2`, … (sealed contexts); ranges allowed via `@tA..@tB` or `@tA:@tB`. `@history` is shorthand for `@t0..@t-*`.
 - Position uses hops inside parentheses. Single-hop shorthand MAY be allowed in implementations that previously shipped it; canonical remains parenthesized.
 - Insertion sentinel is a trailing comma in position; sugars: `end`, `+N` (after child N), `-N` (before child N).
 
@@ -48,24 +48,34 @@ Canonical order for selectors:
 - `.seg` — Segment  
 - `.cont` — Container  
 - `.block` — Block  
-- Namespaced user-assigned types MUST also be supported. A type token like `.block:summary` MUST match nodes whose `nodeType` equals "block" and whose `kind` equals "summary".
-- Equivalence (Normative): `.block:summary` and `[nodeType='block'][kind='summary']` MUST be treated as equivalent forms and MUST return identical results.
-- `kind` is not a type; query it via attributes (e.g., `.block[kind='tool_call']`). Bare `.tool_call` is not standardized and MUST NOT be required for conformance.
+
+Type Sugar (Normative):
+- Input sugar: `.Base:TypeName` ≡ `[nodeType='TypeName']`
+  - Examples: `.cont:Message` ⇒ `[nodeType='Message']`; `.block:DiffChunk` ⇒ `[nodeType='DiffChunk']`
+- Input without sugar: `.cont` ⇒ `[nodeType='cont']`, `.block` ⇒ `[nodeType='block']`, etc.
+- Output normalization MUST expand sugar to attributes and MUST NOT emit `.Base:TypeName`.
+
+Kind is not targeted by this sugar:
+- `kind` is optional metadata and MUST be addressed explicitly with attributes. This specification does not use `kind` in examples.
+- `.block:summary` is invalid as a `kind` shorthand and MUST be treated as TYPE sugar; reject unless `summary` is a real node type per parser policy (see Parser Behavior).
+
+Parser Behavior (Normative options):
+- If the colon suffix token resolves to a known type in the engine’s registry, parse as `nodeType`.
+- If unknown and no dynamic type system is present, either:
+  - treat as a parse error; or
+  - accept optimistically as `[nodeType='<token>']` per implementation policy.
+- Engines MUST NOT silently reinterpret `:<token>` as `kind`.
 
 ### 3.3 Keys and IDs
 - `#<key>` — shorthand for `{ key="…" }` (NEVER id)
 - `{ id="…" }` — select by node ID (opaque string)
 
-### 3.4 Pseudo-classes and Depth Qualifier
+### 3.4 Pseudo-classes and Depth (Structural Only)
 - `:pre` — nodes with `offset < 0`  
 - `:core` — nodes with `offset = 0`  
 - `:post` — nodes with `offset > 0`  
-- `:depth(expr)` — select turns by Universal Depth (03 – Lifecycle §3.6):  
-  - Exact: `:depth(0)`, `:depth(1)`, `:depth(-1)`  
-  - Lists: `:depth(1,2,5)`  
-  - Inclusive ranges: `:depth(1-3)` or `:depth(1..3)`  
-  - Comparisons: `:depth(<0)`, `:depth(>0)`, `:depth(>=2)`, `:depth(<=-1)`  
-  - Sets: `:depth({1,2,4})`  
+- Depth denotes region only (`^sys`, `^ah`, `^seq`). It never encodes time. Use `@t…` for temporal addressing.  
+- Deprecated Input Sugar — `:depth(expr)`: Engines MAY accept `:depth(...)` as input and MUST translate to `@t…` forms for temporal use (`.X:depth(1)` ⇒ `@t0 .X`; `.X:depth(n)` (n ≥ 2) ⇒ `@t-(n-1) .X`). Canonical output MUST NOT emit `:depth(...)`.
 - `:first` — first sibling among a set  
 - `:last` — last sibling among a set  
 - `:nth(n)` — nth sibling (1-based index)
@@ -73,41 +83,42 @@ Canonical order for selectors:
 Offset-based pseudos map to canonical offset semantics defined in [02 – Invariants §4.1–4.2](02-invariants.md).
 
 Region Aliases (Normative, pure sugar):
-- `^sys` ≡ `depth(-1)`
-- `^ah`  ≡ `depth(0)`
-- `^seq` ≡ the set `{ depth(n) | n ≥ 1 }`
+- `^sys` ≡ `depth(-1)` (structural)
+- `^ah`  ≡ `depth(0)`  (structural)
+- `^seq` — structural region for historical segments (no temporal equivalence; use `@t…` for history)
 
-Depth may be expressed directly as a selector qualifier:
-- `.seg:depth(n)` where `n ∈ ℤ`
-- Optional extension: `.seg:depth(a..b)` with `a ≤ b`, inclusive
+Deprecated Depth Qualifier (input-only translation): see above.
 
 Examples (canonical forms):
 - `depth(0) > .cont[offset=0]`            # active head core container
-- `.seg:depth(1) > .block#summary`        # last committed segment’s summary
-- `.seg:depth(2)`                         # second most recent committed segment
+- `@t0 .seg > .block#summary`             # last committed segment’s summary (temporal)
+- `@t-1 .seg`                             # an older segment (temporal)
 - `depth(-1) > .block#policy`             # system container child (if authorized)
 
-Where an alias appears, the depth form MUST be accepted and treated as identical:
+Where an alias appears, structural depth forms MUST be accepted as identical inputs (normalized output SHOULD prefer `depth(n)` / `.seg` with `@t…` for time):
 - `^ah > .cont[offset=0]` ≡ `depth(0) > .cont[offset=0]`
-- `^seq .seg:depth(1)` ≡ `.seg:depth(1)`
 - `^sys > *` ≡ `depth(-1) > *`
 
 Attribute filters remain unchanged and MAY be combined with depth predicates: `[key]`, `[type]`, `[tag]`, etc. Overlap note: `[key="K"]` MAY return multiple matches; use depth ordering or additional filters (e.g., `:depth(>0):first`) to choose the newest instance.
 
 ### 3.5 Attributes
 Selectors MUST support attributes:  
-`[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [role] [kind]`
+`[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [kind]`
 
 #### 3.5.1 Grouped Shorthand (Normative)
 In addition to `[attr]` filters, implementations MUST support a grouped shorthand form using parentheses immediately after a type token. Example:
 ```
-.block(kind='important' ttl=5)
+.block(status='important' ttl=5)
 ```
 is semantically identical to:
 ```
-.block[kind='important'][ttl=5]
+.block[status='important'][ttl=5]
 ```
-Attributes inside `(...)` are separated by space or comma. This is purely syntactic sugar; engines MUST normalize grouped forms to canonical bracket filters before evaluation. Mixing forms is allowed: `.block(kind='summary')[ttl<=2]`.
+Attributes inside `(...)` are separated by space or comma. This is purely syntactic sugar; engines MUST normalize grouped forms to canonical bracket filters before evaluation.
+
+Normalization Rules (Type vs Kind):
+- Canonical output MUST expand `.Base:TypeName` to `[nodeType='TypeName']`.
+- Canonical output MUST NOT emit `.Base:<…>` for `kind`.
 
 Parentheses immediately following a type token are reserved for this shorthand and MUST NOT collide with pseudos; pseudo-classes continue to use the `:` prefix (e.g., `:depth(...)`).
 
@@ -134,20 +145,19 @@ Validators MUST reject selectors that reference these facets when no `@t` is pre
 Examples:
 
 ```
-@t0 (d1, *:block[kind="summary"]) [age<2]
+@t0 (d1, *:block) [age<2]
 @t0..@t-3 (d2, *:block) @mode=latest [depth=2]
 ```
 
-### 3.6 Search Operators
-- Single-step: `? { … }`  
-- Recursive: `?? { … }`  
-- Scoped recursive: `within(hops…) ?? { … }`
-
-Note: CSS-style descendant/child combinators are not part of the canonical grammar; use `?` and `??` instead.
+### 3.6 Combinators & Optional/Fallback Operators
+- Combinators:
+  - Space: descendant
+  - `>`: direct child
+- Optional `?` (suffix on Position): for mutations only; if the match set is empty, no-op. Reads do not use `?`.
+- Fallback `??` (infix between two Position patterns): evaluate left; if empty, use right (not union). If left matches but violates required cardinality, error and DO NOT evaluate right.
 
 ### 3.7 Snapshots
-Snapshots are addressable with `@t0` (latest committed turn/snapshot), `@t-1` (older), `@cN` (absolute cycle), or `@*` (all).
-If no `@t` is given, the selector applies to the working state (the live Active Head). Implementations MUST NOT silently assume `@t0`.
+Time prefixes are addressable with `@t0` (active, unsealed), `@t-1` (older, sealed), `@cN` (absolute cycle), or `@*` (all). A time prefix is required in canonical form.
 
 Range addressing across snapshots MUST be supported with **inclusive** semantics:
 - `@t-<start>..<end>` — inclusive range using double-dots  
@@ -168,16 +178,16 @@ Ranges, `@mode`, and time‑derived facets (see §3.5.3) are valid only on snaps
 Hops may include:
 
 - `dN` or `depth(N)` to navigate into `^seq` (structural depth).  
+- `dA..dB` — depth range hop (inclusive), selecting nodes at any depth N where A ≤ N ≤ B. Treated as a single-hop union across those depths; `dK..dK` ≡ `dK`. Depths MUST be non‑negative integers. Applies anywhere a hop is valid, including within `within(...)`. Postfix `+tag`, global `{}` and `[]`, and `@controls` apply after the union.
 - `seg` to indicate a segment container explicitly.  
 - `cont`, `block`, and facet filters as before.  
 
 Examples:
 
 ```
-(d0, cont[offset=0], *:block[role="user"])
-(d1, seg, cont[offset=0], *:block[role="assistant"])
-(d2, seg, *:block[kind="summary"])
-(d-1, *:block[role="system"])
+(d0, cont[offset=0], *:block)
+(d1, seg, cont[offset=0], *:block)
+(d2, seg, *:block)
 ```
 
 ### 3.9 Insertion
@@ -214,13 +224,13 @@ Examples:
 **Examples**
 ```text
 # Non-range (IDs)
-ctx.select("@t0 ^seq .seg:depth(1) .cont > .block[role='assistant']")
+ctx.select("@t0 ( .seg .cont > .block ) { status='ok' }")
 → ["block:a1", "block:a7", ...]
 
 # Range (RangeDiffLatestResult)
-ctx.select("@t-3..@t0 ^seq .seg .block[nodeType='block'][kind='summary']")
+ctx.select("@t-3..@t0 ^seq .seg .block[kind='summary']")
 → {
-     "query": "@t-3..@t0 ^seq .seg .block[nodeType='block'][kind='summary']",
+     "query": "@t-3..@t0 .seg .block",
      "snapshots": [ { "label":"@t0" }, { "label":"@t-1" }, { "label":"@t-2" }, { "label":"@t-3" } ],
      "diffs": [
        { "from":{"label":"@t0"}, "to":{"label":"@t-1"}, "added_ids":[], "removed_ids":["block:sum:c101"], "changed":[] },
@@ -247,7 +257,7 @@ search_or_position := position | deep_search | shorthand_root ;
 position        := "(" hop ( "," hop )* ")" postfix_tags_opt
                  | hop postfix_tags_opt ;
 
-hop             := "d" int
+hop             := "d" int ( ".." int )?
                  | int ( hop_propblock )?
                  | "cont" "[" "offset" "=" int "]"
                  | ( "*" | int ) ":" "block" "." ident
@@ -309,10 +319,9 @@ RangeDiffLatestResult {
 }
 
 # Depth forms (UD)
-ctx.select("^seq .seg:depth(>0)")
-ctx.select(".seg:depth(0)")                # Active Head
-ctx.select(".seg:depth(<0)")               # System depth
-ctx.select(".seg:depth({1,2}) .block")        # Newest two historical turns
+ctx.select("@history .seg")                 # all historical segments (temporal)
+depth(0) > .cont[offset=0]                  # Active Head (structural)
+depth(-1) > *                               # System (structural)
 
 SnapshotRef { "kind":"t"|"c", "value":number, "label":string, "cycle":number }
 
@@ -383,7 +392,7 @@ Non-range calls ignore these options and continue to return IDs.
 Attribute values MUST be compared using appropriate data types:
 
 - **Numeric attributes**: `offset`, `ttl`, `priority`, `cycle`, `created_at_ns`
-- **String attributes**: `nodeType`, `id`, `role`, `kind`, `created_at_iso`
+- **String attributes**: `nodeType`, `id`, `kind`, `created_at_iso`
 
 ### 5.2 Numeric Comparison
 For numeric attributes, implementations MUST:
@@ -406,8 +415,8 @@ For string attributes, implementations MUST:
 4. Treat empty strings as distinct from null/undefined
 
 ```
-[role='user']           # exact string match (case-sensitive)
-[nodeType='block'][kind='summary'] # exact match by canonical nodeType and kind
+[status='ok']           # exact string match (case-sensitive)
+[nodeType='DiffChunk']  # exact match by canonical nodeType
 [id!='abc123']          # string inequality
 ```
 
@@ -431,10 +440,10 @@ When attribute type is ambiguous:
 # Canonical-shape examples (Python string API)
 
 # All pre-context blocks in WS
-ctx.select("(d0, *:block) { role=system } [ ttl>0 ]")
+ctx.select("@t0 ( *:block ) { status='ok' } [ ttl>0 ]")
 
-# Assistant replies from last sealed segment
-ctx.select("@t0 (d1, seg, cont[offset=0], *:block) { role=assistant }")
+# Assistant replies from the most recent sealed context
+ctx.select("@t0 ( d1, seg, cont[offset=0], *:block ) { status='ok' }")
 
 # Expiring soon
 ctx.select("(d-1, *:block) { ttl<=1 }")
@@ -447,10 +456,10 @@ ctx.select("@history +featured @first")
 
 # Deep search
 ctx.select("?? { tag='summary' }")
-ctx.select("within(d1,d3) ?? { type=block, kind=summary } @order=bfs @limit=50")
+ctx.select("@t0 ( (d1, seg) .block:DiffChunk ?? .block:DiffChunk ) @order=bfs @limit=50")
 
 # Insertion sentinel (start of cont)
-ctx.add("(d0, cont[offset=0], )", "block:text { key='hero' }")
+ctx.add("@t0 ( d0, cont[offset=0], )", "block:TextBlock { key='hero' }")
 """
 
 # select across snapshot range t-5 through t-1 (inclusive)
@@ -462,10 +471,10 @@ ctx.select("@* #abc123def")
 # position node N under a specific historical turn (depth targeting)
 # select the target turn at depth 3 and then place N as post-context via offset>0
 # (actual placement is done by the implementation API; selector here shows targeting)
-ctx.select("^seq .seg:depth(3)")
+ctx.select("@t-2 .seg")
 
 # newest instance for a logical key K (sealed history)
-ctx.select("^seq .seg:depth(1) .block[key='K']")
+ctx.select("@t0 .seg .block[key='K']")
 
 # key selection with windowing (normative semantics)
 # engines MUST support equivalent of newest and second-newest selection
@@ -473,13 +482,13 @@ select("[key='K']").limit(1)                    # newest instance (per determini
 select("[key='K']").skip(1).limit(1)            # second-newest
 
 # composed examples
-select("[key='K']").where(".seg:depth(>0)")     # all history overlaps for K (excluding AH)
-select(".seg:depth(<0)[key='policy-banner']")    # system-scoped by key
+select("@history .seg").where("[key='K']")      # all history overlaps for K (excluding AH)
+select("depth(-1) > *[key='policy-banner']")     # system-scoped by key
 
 # shorthand group form (equivalent to multiple [..] filters)
-ctx.select("^seq .seg:depth(1) .block(role='assistant' ttl<=2)")
+ctx.select("@t0 ( .seg .block(status='ok' ttl<=2) )")
 # equivalent to:
-ctx.select("^seq .seg:depth(1) .block[role='assistant'][ttl<=2]")
+ctx.select("@t0 ( .seg .block[status='ok'][ttl<=2] )")
 
 ---
 
@@ -501,15 +510,15 @@ Given this minimal snapshot fixture at `@t0`:
   "root": {
     "children": [
       { "id": "sys-1", "nodeType": "^sys", "children": [
-        { "id": "block:sysA", "nodeType": "block", "role": "system", "kind": "text", "offset": 0, "content": "S" }
+        { "id": "block:sysA", "nodeType": "block", "kind": "text", "offset": 0, "content": "S" }
       ]},
       { "id": "seq-1", "nodeType": "^seq", "children": [
         { "id": "seg:1", "nodeType": "seg", "children": [
           { "id": "cont:1", "nodeType": "cont", "children": [
-            { "id": "block:u1", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "ttl": 2, "content": "U1" }
+            { "id": "block:u1", "nodeType": "block", "kind": "text", "offset": 0, "ttl": 2, "content": "U1" }
           ]},
           { "id": "cont:2", "nodeType": "cont", "children": [
-            { "id": "block:a1", "nodeType": "block", "role": "assistant", "kind": "text", "offset": 0, "ttl": 1, "content": "A1" }
+            { "id": "block:a1", "nodeType": "block", "kind": "text", "offset": 0, "ttl": 1, "content": "A1" }
           ]}
         ]},
         { "id": "seg:2", "nodeType": "seg", "children": [
@@ -519,7 +528,7 @@ Given this minimal snapshot fixture at `@t0`:
         ]}
       ]},
       { "id": "ah-1", "nodeType": "^ah", "children": [
-        { "id": "block:u3", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U3" }
+        { "id": "block:u3", "nodeType": "block", "kind": "text", "offset": 0, "content": "U3" }
       ]}
     ]
   }
@@ -529,9 +538,9 @@ Given this minimal snapshot fixture at `@t0`:
 Implementations MUST produce exactly these results (IDs and order):
 
 1. `@t0 ^sys .block` → `["block:sysA"]`
-2. `@t0 ^seq .seg:depth(1)` → `["seg:1"]`
-3. `@t0 ^seq .seg:depth(1,2)` → `["seg:1","seg:2"]` (newer→older)
-4. `@t0 ^seq .seg:depth(1-2) .cont > .block` → `["cont:1","cont:2"]`
+2. `@t0 .seg` → `["seg:1"]`
+3. `@t0 .seg` and `@t-1 .seg` (evaluated separately) → `["seg:1"]`, `["seg:2"]`
+4. `@t0 .seg .cont > .block` → `["cont:1","cont:2"]`
 5. `@t0 #block:u2` → `["block:u2"]`
 
 ## 6.3 Additional Range Fixture (Normative)
@@ -544,17 +553,17 @@ To validate range depth selectors, the following minimal snapshot fixture at `@t
   "root": {
     "children": [
       { "id": "seq-2", "nodeType": "^seq", "children": [
-        { "id": "seg:1", "nodeType": "seg", "children": [ { "id": "cont:1", "nodeType": "cont", "children": [ { "id": "block:u1", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U1" } ] } },
-        { "id": "seg:2", "nodeType": "seg", "children": [ { "id": "cont:2", "nodeType": "cont", "children": [ { "id": "block:u2", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U2" } ] } },
-        { "id": "seg:3", "nodeType": "seg", "children": [ { "id": "cont:3", "nodeType": "cont", "children": [ { "id": "block:u3", "nodeType": "block", "role": "user", "kind": "text", "offset": 0, "content": "U3" } ] } }
+        { "id": "seg:1", "nodeType": "seg", "children": [ { "id": "cont:1", "nodeType": "cont", "children": [ { "id": "block:u1", "nodeType": "block", "kind": "text", "offset": 0, "content": "U1" } ] } },
+        { "id": "seg:2", "nodeType": "seg", "children": [ { "id": "cont:2", "nodeType": "cont", "children": [ { "id": "block:u2", "nodeType": "block", "kind": "text", "offset": 0, "content": "U2" } ] } },
+        { "id": "seg:3", "nodeType": "seg", "children": [ { "id": "cont:3", "nodeType": "cont", "children": [ { "id": "block:u3", "nodeType": "block", "kind": "text", "offset": 0, "content": "U3" } ] } }
       ]}
     ]
   }
 }
 ```
 
-- Query: `@t0 ^seq .seg:depth(1-3) .block[role='user']`
-  Expect: `["block:u1","block:u2","block:u3"]` (newer→older across matched turns)
+- Query (evaluate per snapshot): `@t0 .seg .block`, `@t-1 .seg .block`, `@t-2 .seg .block`
+  Expect: per-snapshot IDs in canonical order; cross-snapshot recency is expressed by the `@t…` prefix, not by `:depth`.
 
 
 ## 7. Conformance Checklist
@@ -563,7 +572,7 @@ An implementation is conformant if:
 
 1. Roots ^sys, ^seq, ^ah, ^root MUST be supported.
 2. Types .seg, .cont, .block MUST be supported.
-3. User-assigned nodeType MUST be matchable via namespaced type tokens (e.g., `.block:summary`) and via attributes (e.g., `[nodeType='block:summary']`).
+3. User-assigned nodeType MUST be matchable via type sugar `.Base:TypeName` (normalizes to `[nodeType='TypeName']`) and via attributes (e.g., `[nodeType='SummaryBlock']`).
 4. IDs MUST be matched exactly (case-sensitive).
 5. All specified pseudos MUST be implemented.
 6. Attributes MUST support all comparison operators.
@@ -572,7 +581,7 @@ An implementation is conformant if:
 9. Results MUST be ordered canonically.
 10. Queries MUST be pure (no side effects).
 11. Invalid selectors MUST raise errors.
-12. `:depth(n1,n2,...)` comma-separated lists MUST be supported.
+12. Deprecated: `:depth(...)` MAY be accepted as input sugar translating to `@t…`. Canonical output MUST NOT emit `:depth(...)`.
 13. Numeric vs string attribute comparison rules MUST be followed.
 14. Data type detection for attributes MUST be implemented correctly.
 15. Default scope if omitted MUST be the working state (Active Head) (see §3.7); implementations MUST NOT assume `@t0` for queries without an explicit snapshot.
@@ -611,8 +620,8 @@ Given the minimal snapshot fixture in §6.2, implementations MUST produce exactl
 - Query: `@t0 #block:u2`
   Expect: `["block:u2"]`
 
-- Query: `@t0 .block[role='assistant']`
-  Expect: `["block:a1"]`
+- Query: `@t0 ( .block ) { status='ok' }`
+  Expect: IDs matching canonical output ordering
 
 - Query: `@t0 ^seq .seg:depth(1-2) .block[ttl<=1]`
   Expect: `["block:a1"]`
@@ -620,8 +629,24 @@ Given the minimal snapshot fixture in §6.2, implementations MUST produce exactl
 - Query: `@t0 ^seq .seg:depth()`
   Expect: MUST raise an error (invalid selector: empty depth)
 
-- Query: `@t0 ^seq .seg:depth(3) .block[role='user']`
+- Query: `@t0 .seg .block`
   Expect: `[]` (empty match, not an error)
 
 [← 03-lifecycle-ttl](03-lifecycle-ttl.md) | [↑ Spec Index](../README.md) | [→ 05-snapshots](05-snapshots.md)
+
+### 7.2 Golden Tests — Depth Range hop (Normative)
+
+---
+(d1..d10)
+---
+d2..d4 +summary
+---
+(d1..d3, *:block.note)
+---
+within( d0..d2 ) ?? { kind="header" } @order=pre @unique
+---
+(d5..d5) { author="earl" } @limit=1
+---
+@t0 ( d1..d3 ) [ sticky ] @order=post
+---
 

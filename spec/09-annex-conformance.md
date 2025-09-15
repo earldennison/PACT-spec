@@ -29,13 +29,13 @@ Reference: 02 – Invariants §§2–9, §11.
 ## B. Selectors (from 04 – Context Selectors)
 
 MUST (mark one):
-- [ ] Yes  [ ] No — Are roots `^sys`, `^seq`, `^ah`, `^root` supported?
-- [ ] Yes  [ ] No — Are types `.seg`, `.cont`, `.block` supported, and do `.block:summary` and `[nodeType='block'][kind='summary']` return identical results?
+- [ ] Yes  [ ] No — Are roots `^sys`, `^seq`, `^ah`, `^root` accepted as structural inputs (normalized output prefers `depth(n)`/`.seg`)?
+- [ ] Yes  [ ] No — Are types `.seg`, `.cont`, `.block` supported, and does type sugar `.block:TypeName` normalize to `[nodeType='TypeName']`?
 - [ ] Yes  [ ] No — Do ID selectors `#<id>` match exactly (case‑sensitive)?
-- [ ] Yes  [ ] No — Are pseudos `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)` implemented, including `:depth(n1,n2,...)` lists and `:depth(n1-n2)` ranges?
-- [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [role] [kind]` supported with `= != < <= > >=` and correct numeric/string semantics?
+- [ ] Yes  [ ] No — Are pseudos `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)` implemented (note: `:depth(...)` is deprecated input sugar and MUST NOT appear in canonical output)?
+- [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]` supported with `= != < <= > >=` and correct numeric/string semantics?
 - [ ] Yes  [ ] No — Are combinators descendant (`A B`) and child (`A > B`) supported?
-- [ ] Yes  [ ] No — Are `@t0`, `@t-1`, `@cN`, `@*` supported, with default `@t0` if omitted and no requirement for explicit `@t0`?
+- [ ] Yes  [ ] No — Are `@t0`, `@t-1`, `@cN`, `@*` supported, with default `@t0` if omitted?
 - [ ] Yes  [ ] No — Are snapshot ranges `@tA..B` and `@tA:B` supported with inclusive semantics, and do both operators (`..`, `:`) produce identical results?
 - [ ] Yes  [ ] No — Are results ordered canonically and queries side‑effect free?
 - [ ] Yes  [ ] No — Do invalid selectors raise errors?
@@ -79,7 +79,7 @@ Reference: 07 – Debugging and Inspection §2–§7.
 
 ## E. Commit Sequence (Normative Reference)
 
-At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compaction (if implemented) in canonical order; 3. Seal `^ah` into a new `mt` under `^seq`; 4. Produce snapshot `@t0`.
+At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compaction (if implemented) in canonical order; 3. Seal the context into a snapshot; 4. Expose `@t0` as the new active working set.
 
 ---
 
@@ -88,7 +88,7 @@ At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compacti
 To claim compliance with Region Alias Equivalence, an implementation MUST:
 
 1) Accept `depth(0)` wherever `^ah` is accepted and produce identical selections.  
-2) Accept `.seg:depth(n)` for any historical segment `n ≥ 1` wherever `^seq` addressing is used.  
+2) Accept structural depth forms for anchors (`depth(0)`/`depth(-1)`) as identical to `^ah`/`^sys`. History uses `@t…`.
 3) Accept `depth(-1)` wherever `^sys` is accepted (subject to authorization).  
 4) Provide a conformance test that round-trips alias ↔ depth forms with identical results.
 

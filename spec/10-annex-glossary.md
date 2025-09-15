@@ -16,7 +16,7 @@ Includes the `^ah` and any other nodes created during this cycle. Ends when comm
 - Region Aliases: ^ah (alias) ≡ depth(0), ^seq (alias) ≡ { .seg:depth(n) | n≥1 }, ^sys (alias) ≡ depth(-1).
 - Terminology: Do not use “sealed conversational turn.” Use “turn” only for the full snapshot. Use “segment” for the structural container under `^seq`. Use “sealing” only to refer to the commit-time operation.
 - Core (`cont`): Container at `offset=0` inside a segment/turn; the main message body. Exactly one per segment. See 02 – Invariants §4.2.
-- Block (`block`): Leaf/content node (text/call/result/media, etc.) with optional `role` and `kind`. See 01 – Architecture §2.
+- Block (`block`): Leaf/content node (text/call/result/media, etc.). See 01 – Architecture §2.
 - Combinator: Selector relationship operators. Descendant (`A B`) matches any descendant; child (`A > B`) matches direct children only. See 04 – Selectors §3.3, §4.
 - Effective History: Rendered history computed from historical turns plus any additions
   (e.g., summaries, redactions, corrections) created after sealing. **PACT does not

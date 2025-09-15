@@ -122,15 +122,13 @@ Nodes with live references MUST NOT be removed (expired or pruned). If liveness 
 
 ## 5. Sealing & Snapshots
 ### 5.1 Active Head
-There MUST be at most one `^ah` node per snapshot. At commit, the `^ah` is sealed
-into history as a new `seg` under `^seq`. Once sealed, the `cont[offset=0]` core is immutable.
-`^ah` denotes **structure** only; it does not define what is editable.
+There MUST be at most one `^ah` node per snapshot (structural anchor). `^ah` denotes **structure** only; it does not define what is editable.
 
 ### 5.2 Sealing & Snapshots
-At commit, the Active Head is sealed into history and a snapshot is emitted. Sealed turns and snapshots are immutable artifacts. Sealing affects mutability; `^ah` is a structural pointer, while mutability is temporal and applies to the Active Turn (`at`).
+At commit, the context is sealed into a snapshot (sealed context). `@t0` is the active (unsealed) working set; sealed snapshots are addressed by `@t-1`, `@t-2`, … Sealing affects mutability; `^ah` is a structural pointer, while mutability is temporal and applies to the Active Turn (`at`).
 
 ### 5.3 Effective History
-After sealing, implementations MAY add new nodes (e.g., summaries, redactions, corrections) anywhere permitted by placement rules. Implementations MUST NOT mutate sealed nodes; changes MUST be expressed by adding new referencing blocks. PACT does not define any semantic override among such nodes. Rendering remains purely structural and deterministic: nodes are serialized in canonical order; any higher-level interpretation (e.g., "use a summary instead of originals") is an implementation choice outside this specification. Conformance is judged solely on structural serialization; semantic use of additions (summaries, redactions, corrections) is out of scope.
+After sealing, implementations MAY add new nodes (e.g., summaries, redactions, corrections) anywhere permitted by placement rules. Implementations MUST NOT mutate sealed context; changes MUST be expressed by adding new referencing nodes. PACT does not define any semantic override among such nodes. Rendering remains purely structural and deterministic: nodes are serialized in canonical order; any higher-level interpretation (e.g., "use a summary instead of originals") is an implementation choice outside this specification. Conformance is judged solely on structural serialization; semantic use of additions (summaries, redactions, corrections) is out of scope.
 
 Implementations MUST NOT advertise semantic precedence of summaries/corrections as part of PACT conformance.
 

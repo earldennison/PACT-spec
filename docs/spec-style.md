@@ -17,7 +17,7 @@
 
 ## Selector Formatting (SPA order)
 - Canonical order: `@time  (position)  { attributes }  [ behavior ]  @controls`.
-- Normalize attribute order: `key, id, type, kind, role, tag, schema, mime, lang`.
+- Normalize attribute order: `key, id, type, kind, tag, schema, mime, lang`.
 - Normalize behavior order: `ttl, cad, phase, age, born_turn`.
 - Single-hop MAY be parenless only if previously agreed; otherwise use parentheses for multi-hop.
 - Attach hop-scoped `{…}` with no preceding space; global `{…}`/`[ … ]` preceded by a single space.

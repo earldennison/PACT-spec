@@ -26,25 +26,21 @@ The root has three required children (regions):
   Persistent system-level instructions/background.  
   Nodes here commonly have `ttl=None`.
 
-- **`^seq` (alias) — Conversation Sequence; equals `{ depth(n) | n ≥ 1 }`**  
-  Sequence of historical turns (mt) produced at commit.  
-  Turns are appended in order; once in ^seq, each turn’s mc[offset=0] bytes are immutable.  
-  Address via aliases or canonical depth: `.mt:depth(1)` is newest, `.mt:depth(2)` is the one before, etc.
+- **`^seq` (alias) — Conversation Sequence (structural)**  
+  Structural region containing historical segments. History selection uses `@t…`; there is no mapping of history to depth.
 
-- **`^ah` (alias) — Active Turn; equals `depth(0)`**  
-  Holds the current in-progress turn that will be sealed into `^seq` at commit.  
-  ⚠️ **Note:** Mutability is **not** a property of `^ah` itself. Editability during the cycle is governed
-  by the **Active Turn (`at`)** (see 03 – Lifecycle §5.5). Only at commit is `^ah` sealed into `^seq` as a new `mt`.
+- **`^ah` (alias) — Active Head; equals `depth(0)`**  
+  Structural anchor for the working set in the current cycle.
 
 #### Mutability Note (Normative)
-- Region roles (`^sys`, `^seq`, `^ah`) DO NOT imply immutability in the active cycle. Only sealed cores (`depth > 0`, `mc[offset=0]`) and committed snapshots are immutable by this spec.
+- Region anchors (`^sys`, `^seq`, `^ah`) are structural only and DO NOT imply immutability. Immutability applies only to the sealed context (snapshots addressed by `@t-1`, `@t-2`, …).
 
 ### 1.3 Canonical Primitives (minimal set)
-PACT components are inherently **spatiotemporal**. Implementations MUST support these primitives:
+PACT components are **spatial** within a selected time. Implementations MUST support these primitives:
 
 - **Identity** — opaque stable `id` per node (see §5 and 02 – Invariants §3)
 - **Payload** — the content-bearing body (primarily in `.block` under `.cont[offset=0]`)
-- **Depth** — universal placement along the commit axis (see §3.2 UD)
+- **Depth** — structural region/path indicator (never temporal)
 - **Offset** — relative placement within a turn: `<0` pre, `0` core, `>0` post
 - **Cadence** — positive integer materialization frequency per episode (renamed from “cycle” field for refresh intervals)
 - **TTL** — time-to-live in episodes (commit boundaries)
@@ -84,9 +80,7 @@ PACT defines **three canonical node types** for interoperability and selectors:
 
 - **`block` (Block)**  
   Leaf/content node: text, tool call, tool result, media, document, etc.  
-  Provider‑agnostic. SHOULD carry attributes for interoperability:
-  - `role`: `"user" | "assistant" | "tool" | "system" | "other"`
-  - `kind`: e.g., `"text" | "call" | "result" | "image" | "summary"`
+  Provider‑agnostic. Attributes commonly used for interoperability include `kind`, `key`, and `tag`.
 
 ### 2.1 User‑Assigned Types (allowed and encouraged)
 Implementations and developers MAY define additional **user‑assigned node types** to express domain semantics.
@@ -110,25 +104,14 @@ Offsets apply at every container boundary (segments, containers, groups):
 - `offset = 0` → core container (exactly one at `offset=0`; multiple cores are invalid)
 - `offset > 0` → post‑context
 
-### 3.2 Global Depth Axis (UD)
-Depth is a single, signed axis across all regions:
+### 3.2 Global Depth Axis (Structural)
+Depth is a single, signed axis across regions and is purely structural:
 
-- `d = 0` → Active Turn (`^ah`), writable during the current episode
-- `d ≥ 1` → Sealed history (`^seq`), newest = `1`, then `2`, ... oldest
-- `d = -1` → System space (`^sys`), immutable by default
-- (Reserved) `d ≤ -2` → reserved for future system strata; userland MUST NOT use without explicit extension
+- `d = -1` → System space (`^sys`)
+- `d = 0`  → Active Head (`^ah`)
+- `d ≥ 1`  → Structural positions under `^seq`
 
-Commit transition `t → t+1` updates depths deterministically:
-- if `d ≥ 1`: `depth := depth + 1`
-- if `d = 0`: becomes `d = 1` (newly sealed)
-- if `d = -1`: unchanged (system)
-
-TTL interaction under UD:
-- TTL is evaluated at commit. TTL decrements only for `d ≥ 1`.
-- If `ttl = 0` at `d = 0`, the node MUST be dropped pre‑commit.
-
-Canonical render order (equivalent to ^sys → ^seq → ^ah):
-- `d = -1` first → `d ≥ 1` descending (… 3, 2, 1) → `d = 0` last.
+Depth and any derivatives, aliases, or slices are purely structural. They MUST NEVER encode time.
 
 ### 3.3 Nested Placement Invariance
 Placement and ordering rules apply recursively in every container:
@@ -139,15 +122,15 @@ Placement and ordering rules apply recursively in every container:
 This nested invariance ensures a uniform ternary structure across the tree.
 
 ### 3.4 Region Aliases (Normative)
-The following aliases are pure syntactic sugar over depth (also see 04 – Selectors):
+The following aliases are structural sugar over depth (also see 04 – Selectors):
 
-- `^sys` ≡ `.seg:depth(-1)`
-- `^ah`  ≡ `.seg:depth(0)`
-- `^seq` ≡ the set `{ .seg:depth(n) | n ≥ 1 }`
+- `^sys` ≡ `depth(-1)`
+- `^ah`  ≡ `depth(0)`
+- `^seq` — structural region for historical segments (no history↔depth mapping)
 
-### 3.5 Alias≡Depth Equivalence Law (Normative)
+### 3.5 Structural Equivalence (Normative)
 
-For any selector `S`, replacing `^ah` → `depth(0)`, `^sys` → `depth(-1)`, and any `^seq` specific reference → `.seg:depth(n)` for some `n ≥ 1` MUST select the identical node(s). Implementations MUST validate this equivalence.
+For any selector `S`, replacing `^ah` → `depth(0)` and `^sys` → `depth(-1)` MUST select identical nodes. History selection uses `@t…` and is not encoded by depth.
 
 ### 3.6 Permissions Note
 
@@ -165,7 +148,7 @@ Declaring `^sys ≡ depth(-1)` does not grant user access; authorization is orth
 ### 3.6 TTL and Cadence (Summary)
 - TTL is measured per commit (episode). Default is ∞ unless explicitly set.
 - Cadence controls re‑materialization per episode.
-- At commit: `depth` increments (`0→1`, `1→2`, …), TTL decrements for `depth>0`, and expired nodes drop. If `ttl=0` at `depth=0`, the node drops pre‑commit.
+- At commit, depth increments, TTL decrements, and expired nodes drop.
 
 ### 3.7 Formal Statement
 Placement invariants apply globally (depth axis) and locally (offset axis). Context is a recursive ternary structure where every container applies the same rules. Determinism is enforced by ordering, and selectors MUST resolve consistently across depth and offset.
@@ -208,15 +191,16 @@ seg (Segment)
 ### 6.2 Root layout
 ^root
 ├─ ^sys (System Header)
-├─ ^seq (Sealed sequence of turns)
+├─ ^seq (Historical segments — structural region)
 └─ ^ah (Active head: current unsealed segment)
 ---
 
 ## 7. Commit Model
 
-- At each cycle’s end, the Active Head (`^ah`) is **sealed** into a new `seg` under `^seq`.  
-- A fresh Active Head is created for the next cycle.  
-- A **snapshot** is produced at commit; rendering has no side effects: same snapshot → identical provider‑thread bytes.
+- At each cycle’s end, the context is sealed into a snapshot (sealed context).  
+- `@t0` is the active (unsealed) context; sealed snapshots are addressed by `@t-1`, `@t-2`, …  
+- Fresh-@t0 equivalence: If no writes occur after the latest commit, `@t0 ≡ @t-1`. Any write breaks the equivalence; the next commit materializes a new sealed snapshot at `@t-1`.  
+- Rendering has no side effects: identical snapshots → identical provider‑thread bytes.
 
 ---
 

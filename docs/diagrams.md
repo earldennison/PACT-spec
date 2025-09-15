@@ -55,7 +55,7 @@ sequenceDiagram
 ## 4. Selector Traversal
 ```mermaid
 graph LR
-  selector["ctx.select(^seq .seg:depth(1) .block[role=assistant])"]
+  selector["ctx.select(@t0 ( .seg .block ))"]
   snapshot["@t0 snapshot"]
   nodes{{Matched nodes}}
 

@@ -27,7 +27,7 @@ The working state container at `d0` (editable). At commit, `^ah` becomes a new s
 Core container at **`offset = 0`** within a segment/turn. Pre‑context attaches at negative offsets; post‑context at positive offsets.
 
 **Block (`block`)**  
-Leaf/content node (text, tool call, tool result, media, document, etc.). Provider‑agnostic. MAY include attributes like `role` and `kind`.
+Leaf/content node (text, tool call, tool result, media, document, etc.). Provider‑agnostic. Common attributes include `kind`, `key`, and `tag`.
 
 **NodeType**  
 A string that classifies a node.

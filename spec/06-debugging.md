@@ -24,7 +24,6 @@ Every node MUST carry at least:
 
 ### 2.2 Optional Fields
 Nodes MAY also carry:
-- `role` (e.g., `"user"|"assistant"|"tool"|"system"`)  
 - `kind` (e.g., `"text"|"call"|"result"`)  
 - `content_hash` (stable hash of payload for diffing)  
 - `provenance` (who/what produced the node, e.g., `"model:gpt-5"`)  
@@ -45,7 +44,6 @@ Metadata attached at creation MUST remain stable across cycles, except for `ttl`
 | `created_at_ns`  | number   | MUST     | Immutable                                 | Secondary sibling order key (§4.3) |
 | `created_at_iso` | string   | MUST     | Immutable                                 | None |
 | `creation_index` | number   | MUST     | Immutable                                 | Tertiary sibling order key (§4.3) |
-| `role`           | string   | MAY      | Immutable                                 | None |
 | `kind`           | string   | MAY      | Immutable                                 | None |
 | `content_hash`   | string   | MAY      | MAY change when content changes           | None (explicitly excluded) |
 | Namespaced custom (`data_*`, `content_*`) | any | MAY | SHOULD remain stable per meaning | None; unknown attributes MUST NOT affect canonical ordering |
@@ -63,7 +61,7 @@ Selectors MUST support:
 - Types: `.seg`, `.cont`, `.block`  
 - IDs: `#<id>`  
 - Pseudos: `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)`  
-- Attributes: `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [role] [kind]`  
+- Attributes: `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [kind]`  
 - Combinators: descendant (`A B`), child (`A > B`)  
 
 ### 3.3 Debug Queries
@@ -153,5 +151,11 @@ Debugging and diffs are deterministic across runs.
 - E_SNAPSHOT_RANGE_WILDCARD — "@*" is not allowed inside a range.
 - E_SNAPSHOT_RANGE_LIMIT — expanded snapshots exceed maxSnapshots.
 - E_SELECTOR_INVALID — malformed selector or grammar violation.
+
+### Errors specific to Depth Range hops
+
+- E_DEPTH_NEGATIVE — depth values in `dA..dB` MUST be non‑negative.
+- E_DEPTH_RANGE_INVALID — inverted range (`A > B`).
+- E_DEPTH_NOT_INT — non‑integer endpoint in `dA..dB`.
 
 [← 05-snapshots](05-snapshots.md) | [↑ Spec Index](../README.md) | [→ 07-adoption](07-adoption.md)

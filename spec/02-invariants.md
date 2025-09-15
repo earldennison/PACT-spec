@@ -74,7 +74,6 @@ Each node MUST include:
 | `created_at_ns`  | number   | MUST     | Immutable                                 | Monotonic timestamp |
 | `created_at_iso` | string   | MUST     | Immutable                                 | ISO8601 mirror of timestamp |
 | `creation_index` | number   | MUST     | Immutable                                 | Per-cycle tie-breaker |
-| `role`           | string   | MAY      | Immutable                                 | e.g., `user`, `assistant`, `tool`, `system` |
 | `kind`           | string   | MAY      | Immutable                                 | e.g., `text`, `call`, `result`, `image` |
 | `content_hash`   | string   | MAY      | MAY change when content changes           | Excluded from ordering |
 | Custom `data_*`  | any      | MAY      | SHOULD remain stable per meaning          | Namespaced; see §3.5 |
@@ -188,21 +187,20 @@ Empty containers marked removable MUST also be removed. Root and region containe
 ### 5.4 Reference Safety
 Nodes with live references MUST NOT be removed (expired or pruned). If liveness cannot be determined, implementations MUST preserve such nodes conservatively and MAY defer expiry across commits to satisfy this requirement.
 
-## 6. Turns and Sealing
+## 6. Sealing and Context States
 ### 6.1 Active Head
-There MUST be at most one `^ah` per snapshot.
+There MUST be at most one `^ah` per snapshot (structural anchor for the working set).
 
 ### 6.2 Sealing
-At commit, `^ah` is sealed into `^seq` as a new `seg`. The sealed `cont` is immutable.
+At commit, the context is sealed into a snapshot (sealed context). `@t0` is never sealed. Sealed snapshots are addressed by `@t-1`, `@t-2`, …
 
-No sealing occurs during the Active Turn (at). Sealing only happens at the commit boundary, when ^ah becomes a new seg under ^seq.
+Fresh-@t0 equivalence (Normative): If no writes occur after the latest commit, `@t0 ≡ @t-1`. Any write breaks the equivalence; the next commit materializes a new sealed snapshot at `@t-1`.
 
 ### 6.3 Depth
-Depth is globally defined as in §2.4. In `^seq`, depth counts newest→oldest (`1` = most recent historical turn).  
-The Active Turn is **depth-addressable** as `depth(0)` (alias `^ah`).
+Depth is structural only (see §2.4). It MUST NEVER encode time. History addressing uses `@t…`.
 
 ### 6.4 Immutability
-Sealed cores (`cont @ offset=0`) MUST NOT be mutated. Snapshots are immutable records. Non‑core nodes (pre/post context, summaries, redactions, corrections, containers) MAY be added or removed in subsequent cycles, including attachments targeting historical turns, via new nodes and lifecycle—never by mutating sealed bytes in place.
+Snapshots are immutable records. Non‑sealed working content MAY be added or removed in subsequent cycles via new nodes and lifecycle—never by mutating sealed bytes in place.
 
 ## 7. Pruning (Optional)
 **Preface.** Pruning is **optional**. If pruning is disabled, an implementation remains conformant by
@@ -234,15 +232,11 @@ Rendering MUST follow canonical order. Identical snapshots → identical bytes.
 ### 8.3 No Side Effects
 Serialization MUST NOT mutate the tree.
 
-### 8.4 Snapshot Addressing
-Snapshots are addressable:
-- `@t0` current
-- `@t-1` previous
+### 8.4 Time Prefix Addressing
+Time prefixes are addressable:
+- `@t0` active (unsealed) working set (default if omitted)
+- `@t-1` newest sealed snapshot; `@t-2`, … older sealed snapshots
 - `@cN` absolute cycle
-
-#### `@t0` vs Active Turn (Normative)
-- `@t0` designates the most recent **committed** snapshot. Snapshots (including `@t0`) are immutable records and exist only post‑commit.
-- The live editable scope during a cycle is addressed by `depth(0)` (Active Turn), not by `@t0`. No region at `depth ≤ 0` is immutable by this specification.
 
 ### 8.5 Snapshot Boundary (Normative)
 See Lifecycle §7 for Commit Sequence (Normative). A snapshot MUST serialize to the provider‑bound bytes for that cycle. Persistence MAY be asynchronous; equivalence is judged on logical content and rendered bytes.
@@ -323,17 +317,14 @@ Within each `seg` (or `^ah`):
 2. Core container (`cont @ offset=0`) — serialized as the main message body.  
 3. Post-context (`offset > 0`) — all `block` children.
 
-### 12.4 Roles
-- Each `block` MAY carry a `role` (e.g., `"user"`, `"assistant"`, `"tool"`, `"system"`).  
-- Roles MUST be preserved and mapped consistently to provider schemas.  
-- If no role is given, default: `"system"` for `^sys`, `"user"` for turns.
+### 12.4 Attributes
+This specification does not define or require a `role` attribute. Attributes used in examples are limited to structural/neutral fields.
 
 ### 12.5 Serialization Units
 Each `block` serializes to an object:
 ```json
 {
   "id": "block:u1",
-  "role": "user",
   "kind": "text",
   "content": "Hello!"
 }
