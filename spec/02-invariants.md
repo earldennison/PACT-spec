@@ -50,7 +50,7 @@ For any selector `S`, replacing:
 - any `^seq` reference to a specific turn with `:depth(n)` for some `n ≥ 1`,
 - `^sys` with `depth(-1)`
 
-MUST select the identical node(s). Implementations MUST validate this equivalence.
+MUST select the identical node(s). History selection uses `@t…` and is not encoded by depth.
 
 
 ## 3. Node Identity and Headers

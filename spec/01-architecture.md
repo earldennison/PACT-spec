@@ -12,6 +12,7 @@ This chapter defines PACT’s structural architecture:
 ---
 
 ## 1. Context Tree
+History: the committed sequence of past episodes. Use `@t` to address time.
 
 All PACT implementations MUST maintain a single rooted tree of context components.
 
@@ -130,7 +131,7 @@ The following aliases are structural sugar over depth (also see 04 – Selectors
 
 ### 3.5 Structural Equivalence (Normative)
 
-For any selector `S`, replacing `^ah` → `depth(0)` and `^sys` → `depth(-1)` MUST select identical nodes. History selection uses `@t…` and is not encoded by depth.
+For any selector `S`, replacing `^ah` → `depth(0)` MUST select identical nodes. History selection uses `@t…` and is not encoded by depth.
 
 ### 3.6 Permissions Note
 

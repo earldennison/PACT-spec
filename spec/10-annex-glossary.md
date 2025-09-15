@@ -13,7 +13,7 @@ Includes the `^ah` and any other nodes created during this cycle. Ends when comm
 - Turn: A committed snapshot of the entire context tree. Each commit produces exactly one new turn. Immutable. Contains `^sys`, `^seq` (segments), and `^ah` as it was at commit.
 - Segment (`seg`): Structural container under `^seq` holding exactly one `cont` core (`offset=0`) plus optional pre-context (`block` with `offset<0`) and post-context (`block` with `offset>0`). At commit, `d0` becomes a new segment appended to `^seq` in the new turn. Segments are structural only; they carry no temporal meaning.
 - Active Head (^ah): The working state at depth(0). Fully mutable subject to structural invariants until commit; becomes a segment at commit.
-- Region Aliases: ^ah (alias) ≡ depth(0), ^seq (alias) ≡ { .seg:depth(n) | n≥1 }, ^sys (alias) ≡ depth(-1).
+- Region Anchors: ^ah, ^seq, ^sys. Depth is structural within ^seq. Time is addressed via `@t`.
 - Terminology: Do not use “sealed conversational turn.” Use “turn” only for the full snapshot. Use “segment” for the structural container under `^seq`. Use “sealing” only to refer to the commit-time operation.
 - Core (`cont`): Container at `offset=0` inside a segment/turn; the main message body. Exactly one per segment. See 02 – Invariants §4.2.
 - Block (`block`): Leaf/content node (text/call/result/media, etc.). See 01 – Architecture §2.

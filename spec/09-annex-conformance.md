@@ -14,7 +14,7 @@ MUST (mark one):
 - [ ] Yes  [ ] No — Nodes have required headers (`id`, `nodeType`, `offset`, `ttl`, `priority`, `cycle`, `created_at_ns`, `created_at_iso`, `creation_index`).
 - [ ] Yes  [ ] No — Each `seg` has exactly one `cont @ offset=0`.
 - [ ] Yes  [ ] No — Canonical sibling order enforced: `offset` → `created_at_ns` → `creation_index` → `id`.
-- [ ] Yes  [ ] No — TTL expiry + cascade at commit; sealed cores immutable; snapshots immutable.
+- [ ] Yes  [ ] No — TTL expiry + cascade at commit; core container bytes immutable after commit; snapshots immutable.
 - [ ] Yes  [ ] No — If pruning is implemented, it is deterministic (**priority → age → id**).
 - [ ] Yes  [ ] No — Serialization has no side effects; diffs compare by `id`; Invalid selectors MUST raise errors.
 
@@ -32,7 +32,7 @@ MUST (mark one):
 - [ ] Yes  [ ] No — Are roots `^sys`, `^seq`, `^ah`, `^root` accepted as structural inputs (normalized output prefers `depth(n)`/`.seg`)?
 - [ ] Yes  [ ] No — Are types `.seg`, `.cont`, `.block` supported, and does type sugar `.block:TypeName` normalize to `[nodeType='TypeName']`?
 - [ ] Yes  [ ] No — Do ID selectors `#<id>` match exactly (case‑sensitive)?
-- [ ] Yes  [ ] No — Are pseudos `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)` implemented (note: `:depth(...)` is deprecated input sugar and MUST NOT appear in canonical output)?
+- [ ] Yes  [ ] No — Are pseudos `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)` implemented?
 - [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]` supported with `= != < <= > >=` and correct numeric/string semantics?
 - [ ] Yes  [ ] No — Are combinators descendant (`A B`) and child (`A > B`) supported?
 - [ ] Yes  [ ] No — Are `@t0`, `@t-1`, `@cN`, `@*` supported, with default `@t0` if omitted?
@@ -88,8 +88,8 @@ At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compacti
 To claim compliance with Region Alias Equivalence, an implementation MUST:
 
 1) Accept `depth(0)` wherever `^ah` is accepted and produce identical selections.  
-2) Accept structural depth forms for anchors (`depth(0)`/`depth(-1)`) as identical to `^ah`/`^sys`. History uses `@t…`.
-3) Accept `depth(-1)` wherever `^sys` is accepted (subject to authorization).  
+2) Accept structural depth forms for anchors (`depth(0)`) as identical to `^ah`. History uses `@t…`.
+3) `^sys` is a structural anchor outside the depth sequence.  
 4) Provide a conformance test that round-trips alias ↔ depth forms with identical results.
 
 ---
@@ -102,7 +102,7 @@ To claim compliance with Region Alias Equivalence, an implementation MUST:
 3) `cont[offset=0]` bytes are immutable after commit.
 
 ### Selectors — MUST
-1) Depth qualifier `.seg:depth(n)` and standalone `depth(n)` are supported.  
+1) Depth addressing via `dN`/`dA..dB` hops and structural anchors are supported.  
 2) SnapshotRange yields `RangeDiffLatestResult` by default.  
 3) No alternate “legacy” result shapes are required or recognized pre‑v1.
 

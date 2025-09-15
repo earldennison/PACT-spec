@@ -75,7 +75,7 @@ Parser Behavior (Normative options):
 - `:core` — nodes with `offset = 0`  
 - `:post` — nodes with `offset > 0`  
 - Depth denotes region only (`^sys`, `^ah`, `^seq`). It never encodes time. Use `@t…` for temporal addressing.  
-- Deprecated Input Sugar — `:depth(expr)`: Engines MAY accept `:depth(...)` as input and MUST translate to `@t…` forms for temporal use (`.X:depth(1)` ⇒ `@t0 .X`; `.X:depth(n)` (n ≥ 2) ⇒ `@t-(n-1) .X`). Canonical output MUST NOT emit `:depth(...)`.
+  
 - `:first` — first sibling among a set  
 - `:last` — last sibling among a set  
 - `:nth(n)` — nth sibling (1-based index)
@@ -95,11 +95,11 @@ Examples (canonical forms):
 - `@t-1 .seg`                             # an older segment (temporal)
 - `depth(-1) > .block#policy`             # system container child (if authorized)
 
-Where an alias appears, structural depth forms MUST be accepted as identical inputs (normalized output SHOULD prefer `depth(n)` / `.seg` with `@t…` for time):
+Where an alias appears, structural depth forms MUST be accepted as identical inputs. Time is addressed solely via `@t` and is independent of depth.
 - `^ah > .cont[offset=0]` ≡ `depth(0) > .cont[offset=0]`
 - `^sys > *` ≡ `depth(-1) > *`
 
-Attribute filters remain unchanged and MAY be combined with depth predicates: `[key]`, `[type]`, `[tag]`, etc. Overlap note: `[key="K"]` MAY return multiple matches; use depth ordering or additional filters (e.g., `:depth(>0):first`) to choose the newest instance.
+Attribute filters remain unchanged and MAY be combined with depth predicates: `[key]`, `[type]`, `[tag]`, etc. Overlap note: `[key="K"]` MAY return multiple matches; use ordering or additional filters to choose the newest instance.
 
 ### 3.5 Attributes
 Selectors MUST support attributes:  
@@ -120,7 +120,7 @@ Normalization Rules (Type vs Kind):
 - Canonical output MUST expand `.Base:TypeName` to `[nodeType='TypeName']`.
 - Canonical output MUST NOT emit `.Base:<…>` for `kind`.
 
-Parentheses immediately following a type token are reserved for this shorthand and MUST NOT collide with pseudos; pseudo-classes continue to use the `:` prefix (e.g., `:depth(...)`).
+Parentheses immediately following a type token are reserved for this shorthand and MUST NOT collide with pseudos; pseudo-classes continue to use the `:` prefix (e.g., `:first`).
 
 #### 3.5.2 Key Selection Semantics (Normative)
 - `[key="K"]` filters by logical family handle. Multiple components MAY share the same `key` within a snapshot; results MAY include multiple instances.
@@ -131,16 +131,14 @@ Comparison operators: `=`, `!=`, `<`, `<=`, `>`, `>=`.
  
 Implementations create attributes via node headers defined in [02 – Invariants §3] (see §3.5 “Attribute Creation and Stability”). Missing optional attributes compare as `null` per §5.5; mandatory headers MUST be populated.
 
-#### 3.5.3 Derived Facets (Snapshot‑only)
+#### 3.5.3 Derived Facets
 
-The following derived facets are defined only on snapshots (turns), not on the working state:
+Time‑derived facets apply only on snapshots (turns), not on the working state:
 
 - `born_turn` — index of the turn where this projection was created.  
 - `age` — number of turns since `born_turn` at the selected snapshot.  
-- `depth` — structural index of the containing segment in `^seq` at the selected snapshot.  
-- `sdepth` (optional) — structural nesting depth from root.  
 
-Validators MUST reject selectors that reference these facets when no `@t` is present.
+Structural facets like depth are addressed by position hops (e.g., `dN`, `dA..dB`) and are independent of `@t`.
 
 Examples:
 
@@ -249,7 +247,7 @@ ctx.select("@t-3..@t0 ^seq .seg .block[kind='summary']")
 
 selector        := temporal_opt search_or_position attributes_opt behavior_opt controls_opt ;
 temporal_opt    := /* WS if omitted */ | "@t" rel | "@t" rel ".." "@t" rel | "@history" ;
-rel             := "0" | ("-" uint) | ("+" uint) ;   # supports "@t0..@t-*"
+rel             := "0" | ("-" uint) | ("+" uint) ;   # supports "@t0..@t-*"; ".." is reused for depth ranges (dA..dB)
 
 search_or_position := position | deep_search | shorthand_root ;
 
@@ -473,7 +471,7 @@ ctx.select("@* #abc123def")
 # (actual placement is done by the implementation API; selector here shows targeting)
 ctx.select("@t-2 .seg")
 
-# newest instance for a logical key K (sealed history)
+# newest instance for a logical key K (history)
 ctx.select("@t0 .seg .block[key='K']")
 
 # key selection with windowing (normative semantics)
@@ -563,7 +561,7 @@ To validate range depth selectors, the following minimal snapshot fixture at `@t
 ```
 
 - Query (evaluate per snapshot): `@t0 .seg .block`, `@t-1 .seg .block`, `@t-2 .seg .block`
-  Expect: per-snapshot IDs in canonical order; cross-snapshot recency is expressed by the `@t…` prefix, not by `:depth`.
+  Expect: per-snapshot IDs in canonical order; cross-snapshot recency is expressed by the `@t…` prefix.
 
 
 ## 7. Conformance Checklist
@@ -581,7 +579,7 @@ An implementation is conformant if:
 9. Results MUST be ordered canonically.
 10. Queries MUST be pure (no side effects).
 11. Invalid selectors MUST raise errors.
-12. Deprecated: `:depth(...)` MAY be accepted as input sugar translating to `@t…`. Canonical output MUST NOT emit `:depth(...)`.
+12. `depth` filters never imply time; combine with `@t` explicitly when needed.
 13. Numeric vs string attribute comparison rules MUST be followed.
 14. Data type detection for attributes MUST be implemented correctly.
 15. Default scope if omitted MUST be the working state (Active Head) (see §3.7); implementations MUST NOT assume `@t0` for queries without an explicit snapshot.
@@ -648,5 +646,23 @@ within( d0..d2 ) ?? { kind="header" } @order=pre @unique
 (d5..d5) { author="earl" } @limit=1
 ---
 @t0 ( d1..d3 ) [ sticky ] @order=post
+---
+
+### 7.3 Golden Tests — Depth vs Time Orthogonality (Normative)
+
+---
+# Depth is structural-only inside a single snapshot
+@t0 ( d1..d3 ) +summary
+---
+# Temporal window is explicit; depth remains structural
+@t-4..@t0 ( d2 ) { kind="note" } @order=pre
+---
+# Depth without any @t is valid (structural addressing at current snapshot)
+(d1) +nav
+---
+# TTL/Cadence do not depend on depth or “sealed”; they’re episode-based
+@t0 ( d0 ) [ ttl=2, cad=1 ] +pinned
+---
+@t-9..@t0 ?? { tags=["summary"] } @first
 ---
 

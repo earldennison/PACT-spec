@@ -62,9 +62,8 @@ Each node has a `ttl` field interpreted in episodes (commit boundaries):
 - `N < 0` → INVALID at evaluation time; MUST be dropped
 
 ### 3.2 Evaluation
-- TTL is decremented per episode at **commit time** for nodes with `depth > 0` (sealed history).
-- Nodes at `depth = 0` with `ttl = 0` MUST be dropped pre‑commit (do not seal into history).
-- Nodes at `depth < 0` (system) do not decrement by default.
+- TTL is decremented per episode at **commit time**. TTL counts episodes after creation and is independent of depth.
+- Nodes with `ttl = 0` expire at the next commit boundary and do not appear in the new snapshot.
 
 ### 3.3 Decrement vs Check
 Implementations MAY store TTL as “remaining episodes” (decrement each commit) or as “expiry episode” (check current episode against expiry).  
@@ -82,12 +81,11 @@ When a component’s `cadence` “fires” in an episode, the implementation MUS
 Non‑normative guidance: `ttl = 1` indicates high‑salience ephemeral content (created this episode and not retained beyond sealing).
 
 ### 3.6 Universal Depth (UD)
-Depth is a single, signed axis across all regions:
+Depth is a single axis across regions and is purely structural:
 
-- `d = -1` → System space (`^sys`), immutable by default
 - `d = 0` → Active Turn (`^ah`), writable during the current episode
-- `d ≥ 1` → Sealed history (`^seq`), newest = `1`
-- (Reserved) `d ≤ -2` → reserved for future system strata; userland MUST NOT use without explicit extension
+- `d ≥ 1` → History (`^seq`), newest = `1`
+- `^sys` is a structural anchor outside the depth sequence
 
 Commit transition `t → t+1` updates depths deterministically:
 - if `d ≥ 1`: `depth := depth + 1`
@@ -167,7 +165,7 @@ of the turn that will be sealed.
 
 ## 6. Attempts & Controls
 ### 6.1 Stop/Edit/Re‑Run
-Within a cycle, provider calls produce attempts recorded in telemetry with statuses: running, completed, canceled, error. Attempts are not part of history. If a user stops an attempt, content within the Active Turn remains editable; the system may modify or replace content and re‑run the provider. Only upon commit is the turn sealed into ^seq and a snapshot emitted. Earlier attempts remain visible to operators for observability and audit in the control plane, but do not affect sealed history or snapshots.
+Within a cycle, provider calls produce attempts recorded in telemetry with statuses: running, completed, canceled, error. Attempts are not part of history. If a user stops an attempt, content within the Active Turn remains editable; the system may modify or replace content and re‑run the provider. Only upon commit is the turn sealed into ^seq and a snapshot emitted. Earlier attempts remain visible to operators for observability and audit in the control plane, but do not affect history or snapshots.
 
 ### 6.2 Attempt Record Schema
 Attempt records MUST include: `attempt_id`, `cycle_id`, `status`, `started_at`, `ended_at`, `provider`, `model`, `params(hash)`, `token_in`, `token_out`, `error(optional)`.
@@ -238,9 +236,9 @@ Cycle t:
 ^ah  └─ block[key="K", ttl=1]
 
 Commit t→t+1:
-- Newest becomes `depth=1` (sealed)
+- Newest becomes `depth=1`.
 - Prior instances (if any) shift deeper (`1→2→…`) and satisfy ODI (`depth(prev) > depth(new)`).
-- `ttl` on sealed instances decrements; those that reach `0` expire and are removed.
+- `ttl` on instances decrements per episode; those that reach `0` expire and are removed.
 
 ### 8.5 Periodic refresher (`cadence=3, ttl=∞`)
 
@@ -248,7 +246,7 @@ Key `K` materializes at t0, t3, t6, … and never expires via TTL:
 
 - On a firing episode, create a new instance at `depth=0` that seals to `depth=1` at commit.
 - Prior copies remain and drift deeper (`2,3,…`).
-- Selecting the newest sealed instance: `^seq .seg:depth(1) .block[key='K']`.
+- Selecting the newest instance: `@t0 ( d1, *:block[key='K'] )`.
 ## 9. Edge Cases & Policy
 
 - System mutability: Writes to `depth < 0`

@@ -11,6 +11,7 @@
 - Python API now requires string selectors in examples (`ctx.select("…")`, `ctx.add("…","…")`).
 - Breaking: Removed `role` attribute from spec, grammar, and examples. Migration: use `kind`, `+tag`, or `#key` to discriminate; update selectors and serialization accordingly.
 - Selectors: allow depth range hop `dA..dB` (inclusive).
+- Docs/Grammar: removed “sealed history” terminology; depth is structural-only; time via `@t` only.
 
 ## 0.1.0 – Initial public specification
 - Canonical placement & ordering centralized in 02 §4

@@ -132,7 +132,7 @@ This section defines mutation semantics against snapshots using Universal Depth 
 ### 6.1 insert(selector, at=depth=k)
 - `k < 0` → insert into System space (depth<0). Requires authorization per implementation policy. This spec does not prescribe immutability for system nodes during the active cycle.
 - `k = 0` → insert into the Active Head (writable this episode).
-- `k > 0` → splice into sealed history at depth `k` (shift `[k..∞] → [k+1..∞]`).
+- `k > 0` → splice into history at depth `k` (shift `[k..∞] → [k+1..∞]`).
   - When inserting with `key=K`, if any live instances with `key=K` exist, enforce ODI such that every prior instance satisfies `depth(prev) < k`. Engines MUST auto‑demote prior instances or reject with `OverlapWouldViolateODI`.
 
 ### 6.2 replace(selector, with=component)

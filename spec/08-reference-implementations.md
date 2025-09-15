@@ -30,7 +30,6 @@ def calculate_content_hash(node):
     hashable_content = {
         'content': node.get('content', ''),
         'kind': node.get('kind', ''),
-        'role': node.get('role', ''),
         # Include any custom content attributes
         **{k: v for k, v in node.items() 
            if k.startswith('content_') or k.startswith('data_')}
@@ -235,7 +234,7 @@ def serialize_snapshot(tree: Dict[str, Any]) -> bytes:
                 normalized[field] = node[field]
         
         # Content fields
-        for field in ['content', 'role', 'kind']:
+        for field in ['content', 'kind']:
             if field in node:
                 normalized[field] = node[field]
                 
@@ -270,7 +269,6 @@ def test_content_hash_stability():
     node1 = {
         'id': 'test1',
         'content': 'Hello world',
-        'role': 'user',
         'ttl': 5,
         'created_at_ns': 1000000
     }
@@ -278,7 +276,6 @@ def test_content_hash_stability():
     node2 = {
         'id': 'test2',  # Different ID
         'content': 'Hello world',
-        'role': 'user', 
         'ttl': 10,      # Different TTL
         'created_at_ns': 2000000  # Different timestamp
     }

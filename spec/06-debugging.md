@@ -60,7 +60,7 @@ Selectors MUST support:
 - Roots: `^sys`, `^seq`, `^ah`, `^root`  
 - Types: `.seg`, `.cont`, `.block`  
 - IDs: `#<id>`  
-- Pseudos: `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)`  
+- Pseudos: `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)`  
 - Attributes: `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [kind]`  
 - Combinators: descendant (`A B`), child (`A > B`)  
 
