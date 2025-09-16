@@ -254,13 +254,13 @@ rel             := "0" | ("-" uint) | ("+" uint) ;
 
 selector_body   := coordinate
                  | coordinate_set
-                 | css_selector
+                 | chain_selector
                  | prop_search ;
 
 coordinate      := "(" "d" int ("," int )* ")" ;            # (dK, o1, o2, ...)
 coordinate_set  := "(" coordinate ("," coordinate)* ")" ;   # ((d1,0),(d2,0,1))
 
-css_selector    := scope_opt? selector_chain ;
+chain_selector  := scope_opt? selector_chain ;
 scope_opt       := "d" int ( ".." int )? ;                   # optional depth scope (d1 or d1..d8)
 selector_chain  := simple_sel ( ws combinator ws simple_sel )* ;
 simple_sel      := anchor ( "." ident )* ;                   # .summary, .note, .mc, .seg, .cont, etc.
@@ -396,6 +396,8 @@ To validate range depth selectors, the following minimal snapshot fixture at `@t
 
 ## 9. Examples (replace with minimal, compliant set)
 
+Examples use the chained selector syntax (dot-chains and `>` for child-of). Coordinates and property-search forms are also shown.
+
 - `@t0 (d1,0,1)` — exact coordinate
 - `@t0 ((d1,0), (d2,0,1))` — coordinate set
 - `@t0 d1..d3 .summary` — summaries in depths 1–3
@@ -429,10 +431,11 @@ Add note: run migration branch + tests; update examples and unit tests.
 
 ## 10. Conformance & Validation
 
-- Parentheses parse only to coordinate or coordinate set (unless explicitly using `css_selector`).
+- Parentheses parse only to coordinate or coordinate set (unless explicitly using `chain_selector`).
 - `.TYPE` anchors must map to nodes whose `type==TYPE`.
 - If `ttl`/`cad` are found in `{...}`, validator MUST recommend moving them to `[...]`.
 - Any removed legacy tokens cause a validation error.
+- Validation: any occurrence of the token "CSS" or explicit DOM/CSS comparisons in headings/subheadings should be flagged and removed; authors must use neutral phrasing such as "chained selector syntax" or "selector chains".
 
 [← 03-lifecycle-ttl](03-lifecycle-ttl.md) | [↑ Spec Index](../README.md) | [→ 05-snapshots](05-snapshots.md)
 
