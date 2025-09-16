@@ -81,8 +81,8 @@ Deterministic enforcement of resource limits (tokens/nodes/depth/region). Order:
 **Transaction / Commit**  
 Atomic update that produces a snapshot. Rendering has no side effects; same snapshot → identical provider‑thread bytes.
 
-**Context Selectors (`ctx.select`)**  
-CSS‑like query language for space (**regions/segments/offsets**) and time (**turns/snapshots**). Supports `^roots`, `#id`, `.type` (canonical or user‑assigned), combinators, pseudos, and attributes.
+**Context Queries (`ctx.select`)**  
+PACT query language for space (**regions/segments/offsets**) and time (**turns/snapshots**). Supports `^roots`, `#id`, `.type` (canonical or user‑assigned), structural hops, predicates, and attributes.
 
 **Diff (`ctx.diff`)**  
 Snapshot delta for a selector: `{added, removed, changed}` by node ID (field‑wise change report recommended). Structural changes SHOULD track re‑parenting explicitly: in the old parent `children_removed += id`, in the new parent `children_added += id`; implementers MAY also include a child‑level `parent_changed {previous_parent_id, new_parent_id}` signal.
@@ -91,7 +91,7 @@ Snapshot delta for a selector: `{added, removed, changed}` by node ID (field‑w
 Result shape for range selects. Includes `query`, resolved `snapshots` sorted newest→oldest, pairwise `diffs` with `added`/`removed`/`changed`, and optional `mode`/`limits` metadata. See Selectors §3.7.
 
 **Re‑parenting**  
-Changing a node’s parent. Prior to commit, any node MAY be re‑parented except `mt` (message turns) and the region container `^sys`. After sealing, cores (`mc[offset=0]`) are immutable; non‑core nodes MAY still be attached/detached across turns via new nodes and lifecycle rules.
+Changing a node’s parent. Prior to commit, any node MAY be re‑parented except `seg` (message turns) and the region container `^sys`. After sealing, cores (`cont[offset=0]`) are immutable; non‑core nodes MAY still be attached/detached across turns via new nodes and lifecycle rules.
 
 **Attempt**  
 A provider call execution within the Active Turn. Tracked in telemetry with fields like `attempt_id`, `cycle_id`, `status`, timestamps, provider/model, params hash, token counters, and optional error. See Lifecycle §6.

@@ -1,5 +1,5 @@
 {
-  "selector": "@t-3..@t0 ^seq .seg[id='seg:c121'] .cont > .block[role='assistant'][kind='text']",
+  "selector": "@t-3..@t0 ^seq .seg[id='seg:c121'] .cont > .block[kind='text'] +assistant",
   "snapshots": [{"label":"@t0"},{"label":"@t-1"},{"label":"@t-2"},{"label":"@t-3"}],
   "diffs": [
     {

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 – 2025-09-15
 - Renamed canonical node types: `cb`→`block`, `mc`→`cont`, `mt`→`seg`.
 - Canonical selector shape locked: `@time  (position)  { attributes }  [ behavior ]  @controls`.
 - Added shorthands: `#key` (NEVER id), `+tag` (root implies deep search, postfix filters only).
@@ -11,7 +11,10 @@
 - Python API now requires string selectors in examples (`ctx.select("…")`, `ctx.add("…","…")`).
 - Breaking: Removed `role` attribute from spec, grammar, and examples. Migration: use `kind`, `+tag`, or `#key` to discriminate; update selectors and serialization accordingly.
 - Selectors: allow depth range hop `dA..dB` (inclusive).
-- Docs/Grammar: removed “sealed history” terminology; depth is structural-only; time via `@t` only.
+- Docs/Grammar: removed “sealed history” terminology; depth is structural-only; time via `@t` only. Clarified `@t0` is working state and MAY be used as a range endpoint.
+- Invariants: added `parent_id` as a machine header (tracked or derivable) with normative constraints; defined move/re‑parent operation semantics and required diff signals (`parent_changed`, `offset_changed`).
+- Queries: renamed “Combinators” → “Structural hops”; attribute list now includes `[cad]` (cadence).
+- Snapshots: added Read Model introspection definitions: `up(N)`, `frame(N)`, `index(N)`.
 
 ## 0.1.0 – Initial public specification
 - Canonical placement & ordering centralized in 02 §4

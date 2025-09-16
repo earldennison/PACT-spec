@@ -1,4 +1,4 @@
-[← 04-selectors](04-selectors.md) | [↑ Spec Index](../README.md) | [→ 06-debugging](06-debugging.md)
+[← 04-queries](04-queries.md) | [↑ Spec Index](../README.md) | [→ 06-debugging](06-debugging.md)
 
 # 05 – Snapshots and Diffs
 
@@ -16,17 +16,19 @@ A snapshot is the PACT tree at the post‑commit boundary per Lifecycle §7.
 Snapshots are one‑to‑one with turns: every turn is a committed snapshot of the entire context tree. A snapshot fixes the state of all segments in `^seq`, the system container (`^sys`), and the active head (`^ah`) at commit time. Snapshots are immutable.
 
 ### 2.1.1 Snapshot Boundary (Normative)
-The snapshot boundary follows the Commit Sequence (Normative) in Lifecycle §7. For cycle `N`, the snapshot at `@t0` MUST re‑serialize to exactly the provider input bytes for that cycle. Implementations MAY persist snapshots asynchronously, provided the logical content equals the post‑commit state used to produce those bytes.
+The snapshot boundary follows the Commit Sequence (Normative) in Lifecycle §7. For cycle `N`, the sealed snapshot for that cycle (addressable as `@t-1` after the next commit) MUST re‑serialize to exactly the provider input bytes for that cycle. Implementations MAY persist snapshots asynchronously, provided the logical content equals the post‑commit state used to produce those bytes.
+
+Fresh‑@t0 equivalence: If no writes occur after a commit, the active working state `@t0` serializes identically to `@t-1`. Any write breaks the equivalence until the next commit.
 
 ### 2.2 Byte Stability
 A snapshot MUST be byte-stable: given the same input, serialization yields identical bytes.  
 Serialization MUST NOT mutate the snapshot.
 
 ### 2.3 Addressing
-Snapshots are referenced as:
-- `@t0` — current snapshot  
-- `@t-1` — previous snapshot  
-- `@cN` — absolute cycle number
+Temporal addresses:
+- `@t0` — active working state (unsealed; not part of history)  
+- `@t-1` — most recent sealed snapshot  
+- `@cN` — absolute cycle number (sealed)
 
 Range addressing across snapshots MUST be supported with inclusive semantics:
 
@@ -40,11 +42,17 @@ Notes:
 
 ### 2.4 Temporal Lens
 
-- `@t0` = the latest committed turn (snapshot).  
-- `@t-1`, `@t-2`, … = older turns.  
-- `@t0..@t-3` = a range of turns, inclusive.  
+- `@t0` = the active working state (unsealed; editable).  
+- `@t-1`, `@t-2`, … = sealed snapshots.
+- `@tA..@tB` (inclusive) = a temporal range. `@t0` MAY appear as an endpoint; in that case, the range includes the current working state evaluated at query time.  
 - If no `@t` is given, selectors apply to the working state (the live active head).  
-- Ranges, `@mode`, and time‑derived facets are only valid on snapshots, not the working state.
+- Time‑derived facets and range semantics are valid whenever a temporal prefix is present; including `@t0` in a range is allowed. Determinism holds for a fixed input state; because `@t0` is mutable pre‑commit, repeated evaluations MAY differ if the working state changes between calls.
+
+### 2.5 Read Model: Introspection (Normative)
+For any node `N` in a snapshot (`@t0` or sealed):
+- `up(N)` := `parent_id` (null for roots)
+- `frame(N)` := `children(parent_id)` if `parent_id ≠ null`, else `∅`
+- `index(N)` := resolved sibling position within `frame(N)` per canonical ordering (02 – Invariants §4.3)
 
 ---
 
@@ -91,7 +99,7 @@ Intra-active-turn moves MAY appear as removed + added when implementations remat
 ### 5.1 Snapshot Export
 ```json
 {
-  "spec_version": "PACT/0.1.0",
+  "spec_version": "PACT/1.0.0",
   "cycle": 42,
   "root": {
     "id": "root-xyz",
@@ -103,27 +111,23 @@ Intra-active-turn moves MAY appear as removed + added when implementations remat
 ### 5.2 Diff Result (Normative)
 ```json
 {
-  "added": ["cb:9a2f"],
-  "removed": ["cb:7c14"],
+  "added": ["block:9a2f"],
+  "removed": ["block:7c14"],
   "changed": [
-    {"id": "cb:5d8b", "fields": ["ttl", "priority"]}
+    {"id": "block:5d8b", "fields": ["ttl", "priority"]}
   ]
 }
 ```
 
 ### 5.3 Snapshot Range Addressing
 
-Selectors MAY reference multiple snapshots using ranges. For example:
+Selectors MAY reference multiple temporal states using ranges. For example:
 
 ```
-ctx.select("@t-5:@t-1 ^ah .block")
+ctx.select("@t-5:@t0 ^ah .block")
 ```
 
-This MUST select across snapshots from `t-5` through `t-1` inclusive and return a RangeDiffLatestResult (see Selectors §3.7.1). The following is equivalent and MUST return identical results:
-
-```
-ctx.select("@t-5:@t-1 ^ah .block")
-```
+This MUST include the working state at `@t0` and sealed snapshots `@t-1`…`@t-5` (inclusive), returning a RangeDiffLatestResult (see Selectors §3.7.1). If `@t0` changes between evaluations, results MAY differ accordingly; sealed endpoints remain stable.
 
 ## 6. Mutations (Aligned with Universal Depth)
 
@@ -170,4 +174,4 @@ An implementation is conformant if:
 11. Remove+add patterns for intra-active-turn changes are permitted for conformance.
 12. Tools SHOULD detect logical moves via content hash matching where possible.
 
-[← 04-selectors](04-selectors.md) | [↑ Spec Index](../README.md) | [→ 06-debugging](06-debugging.md)
+[← 04-queries](04-queries.md) | [↑ Spec Index](../README.md) | [→ 06-debugging](06-debugging.md)

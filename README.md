@@ -22,7 +22,7 @@ This leads to:
 - Lifecycle: cycles, TTL, sealing, cascading cleanup,
 - Budgeting & pruning: reproducible resource enforcement,
 - Snapshots & diffs: stable replay + debugging,
-- Context Selectors: CSS-like traversal across space and time.
+- Context Queries: traversal across space and time.
 
 - Active Turn (`at`) vs `^ah`: `at` governs editability during a cycle; `^ah` is structural only.
 - Snapshot addressing: `@t0`, `@t-1`, `@cN`; ranges (`..` or `:`) are inclusive and range selects return diffs.
@@ -37,7 +37,7 @@ The normative specification lives in [`/spec`](./spec):
 - [01 – Architecture](./spec/01-architecture.md)  
 - [02 – Invariants](./spec/02-invariants.md)  
 - [03 – Lifecycle and TTL](./spec/03-lifecycle-ttl.md)  
-- [04 – Context Selectors](./spec/04-selectors.md)  
+- [04 – Context Queries](./spec/04-queries.md)  
 - [05 – Snapshots and Diffs](./spec/05-snapshots.md)  
 - [06 – Debugging and Inspection](./spec/06-debugging.md)  
 - [07 – Adoption and Compatibility](./spec/07-adoption.md)  
@@ -55,13 +55,13 @@ The list above serves as the spec index. For a single-file view, see [`PACT-Comp
 - [Comparisons](./docs/comparisons.md) — how PACT differs from MemGPT, Letta, Sculptor, etc.  
 - [Diagrams](./docs/diagrams.md) — Mermaid diagrams illustrating the model.  
 - [Spec Style Guide](./docs/spec-style.md) — format and tone rules for spec files.  
-- [Selector Examples](./docs/selector-examples.md) — query patterns across space/time.  
+- [Query Examples](./docs/selector-examples.md) — patterns across space/time.  
 
 ---
 
 ## Version
 
-Current spec version: **0.1.0**  
+Current spec version: **1.0.0**  
 See [`VERSION`](./VERSION) for canonical version string.
 
 ---

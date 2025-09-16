@@ -54,7 +54,7 @@ PACT addresses this gap by formalizing the **structure of context itself**, inde
    **Budgeting strategies** (token/node/depth limits, heuristics) are **non-normative** and out of scope; see *Annex — Budgeting Guidance*.
 
 6. **Selectors & snapshots**  
-   PACT includes a CSS-like query language (`ctx.select`) to traverse both **space** (tree structure) and **time** (snapshots).  
+   PACT includes a query language (`ctx.select`) to traverse both **space** (tree structure) and **time** (snapshots).
    History is the immutable timeline of snapshots; `^seq` is the chat log region.
 
 ---

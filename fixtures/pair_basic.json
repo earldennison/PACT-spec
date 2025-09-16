@@ -1,5 +1,5 @@
 {
-  "selector": "@t-1,@t-5 ^seq .seg .block[role='assistant']",
+  "selector": "@t-1,@t-5 ^seq .seg .block +assistant",
   "from": {"label":"@t-1","cycle":204},
   "to":   {"label":"@t-5","cycle":200},
   "added_ids": ["block:a9","block:a12"],

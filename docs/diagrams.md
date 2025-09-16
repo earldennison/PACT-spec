@@ -24,14 +24,14 @@ graph TD
 
 ```mermaid
 graph TD
-  mt(mt: MessageTurn)
+  seg(seg: MessageTurn)
   pre(block: pre-context)
   cont(cont: core container)
   post(block: post-context)
 
-  mt --> pre
-  mt --> cont
-  mt --> post
+  seg --> pre
+  seg --> cont
+  seg --> post
   cont --> core(block: core content)
 ```
 ---

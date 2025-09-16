@@ -1,4 +1,4 @@
-[← 02-invariants](02-invariants.md) | [↑ Spec Index](../README.md) | [→ 04-selectors](04-selectors.md)
+[← 02-invariants](02-invariants.md) | [↑ Spec Index](../README.md) | [→ 04-queries](04-queries.md)
 
 # 03 – Lifecycle and TTL
 
@@ -140,7 +140,7 @@ Given the same prior snapshots and the same set of non‑expired additions, the 
 - All nodes created during the cycle (in `^ah` or other regions) are editable until sealing.  
 - After sealing, further modifications MUST be expressed as new nodes, never by mutating sealed bytes.
 
-- Within the Active Turn (at), implementations MAY add, remove, reorder, or replace any nodes (including `mc[offset=0]` contents) across regions prior to commit, provided all structural invariants hold. PACT does not constrain developer workflows inside the active cycle; it only constrains the structure and the snapshot emitted at commit.
+- Within the Active Turn (at), implementations MAY add, remove, reorder, or replace any nodes (including `cont[offset=0]` contents) across regions prior to commit, provided all structural invariants hold. PACT does not constrain developer workflows inside the active cycle; it only constrains the structure and the snapshot emitted at commit.
 
 This clarifies that editability is governed by `at`, while `^ah` is merely the structural container
 of the turn that will be sealed.
@@ -150,15 +150,15 @@ of the turn that will be sealed.
 ## 5.6 Active Turn & Commit
 
 ### Active Turn (at) Mutability
-- Within the Active Turn (`depth(0)`), implementations MAY add, remove, reorder, re-parent, or replace any nodes created in the current cycle (including `mc[offset=0]`) provided all structural invariants hold. PACT does not constrain developer workflows inside the active cycle; it constrains structure and the snapshot emitted at commit.
+- Within the Active Turn (`depth(0)`), implementations MAY add, remove, reorder, re-parent, or replace any nodes created in the current cycle (including `cont[offset=0]`) provided all structural invariants hold. PACT does not constrain developer workflows inside the active cycle; it constrains structure and the snapshot emitted at commit.
 - Writes to `^sys` (`depth < 0`) are authorization/policy-gated.
  - During `at`, all nodes at `depth ≤ 0` (including `^ah` and `^sys`) are writable subject only to structural invariants and authorization.
 
 ### Commit (Sealing)
 - No sealing occurs during the Active Turn. Sealing occurs only at the commit boundary.
 - On commit:
-  1) `depth(0)` materializes as a new `.seg:depth(1)` in `^seq` with `cont[offset=0]` bytes fixed (immutable).
-  2) All existing `.seg:depth(k)` shift to `.seg:depth(k+1)`.
+  1) `depth(0)` materializes as a new `seg` at `depth(1)` in `^seq` with `cont[offset=0]` bytes fixed (immutable).
+  2) All existing `seg` at `depth(k)` shift to `depth(k+1)`.
 
 ### Immutability
 - After commit, a `seg`’s `cont[offset=0]` bytes MUST NOT be mutated. Later changes are expressed via new nodes (e.g., overlays, redactions, summaries), not by in-place mutation of sealed bytes.
@@ -187,7 +187,7 @@ At commit, lifecycle MUST be applied in this sequence:
 
 This ordering ensures reproducibility across implementations.
 
-> **Commit Sequence (Normative)** — At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compaction (if implemented) in canonical order; 3. Seal `^ah` into a new `mt` under `^seq`; 4. Produce snapshot `@t0`. (Conformance requires identical results for identical inputs.)
+> **Commit Sequence (Normative)** — At each cycle's commit: 1. TTL expiry and cascading cleanup; 2. Pruning/compaction (if implemented) in canonical order; 3. Seal `^ah` into a new `seg` under `^seq`; 4. Produce snapshot `@t0`. (Conformance requires identical results for identical inputs.)
 
 ---
 
@@ -220,8 +220,8 @@ seg
 ### 8.3 Sealing
 ^ah
 ├─ cont (offset=0)
-│ └─ block (role="user")
-└─ block (offset=+1, role="tool")
+│ └─ block +user
+└─ block (offset=+1) +tool
 
 → At commit, ^ah is sealed into ^seq as new seg.
 → cont core is immutable from this point onward.

@@ -1,5 +1,5 @@
 {
-  "selector": "@t-2,@t-5 ^seq .seg .block[role='tool'][kind='json']",
+  "selector": "@t-2,@t-5 ^seq .seg .block[kind='json'] +tool",
   "from": {"label":"@t-2"}, "to": {"label":"@t-5"},
   "added_ids": [],
   "removed_ids": [],

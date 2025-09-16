@@ -2,7 +2,7 @@
 
 This document provides comprehensive examples of PACT context selectors for real-world use cases.
 
-See [04 – Context Selectors](../spec/04-selectors.md) for the formal specification.
+See [04 – Context Queries](../spec/04-queries.md) for the formal specification.
 
 ---
 
@@ -42,19 +42,19 @@ ctx.select("^seq .block:summary")            // type token (nodeType="block", ki
 ctx.select("^root .block[kind='tool_call']") // kind is an attribute
 ```
 
-### Selecting by Role
+### Selecting by Tag
 ```javascript
 // All user messages
-ctx.select("^root .block[role='user']")
+ctx.select("^root .block +user")
 
 // All assistant responses
-ctx.select("^root .block[role='assistant']")
+ctx.select("^root .block +assistant")
 
 // System messages only
-ctx.select("^sys .block[role='system']")
+ctx.select("^sys .block +system")
 
 // Tool calls and results
-ctx.select("^root .block[role='tool']")
+ctx.select("^root .block +tool")
 ```
 
 ---
@@ -64,16 +64,16 @@ ctx.select("^root .block[role='tool']")
 ### Recent Turns
 ```javascript
 // Most recent historical turn
-ctx.select("^seq .seg:depth(1)")
+ctx.select("( d1 )")
 
 // Last 3 historical turns
-ctx.select("^seq .seg:depth(1,2,3)")
+ctx.select("( d1..d3 )")
 
 // Last turn's user message
-ctx.select("^seq .seg:depth(1) .block[role='user']")
+ctx.select("( d1, .block ) +user")
 
 // Last turn's assistant response
-ctx.select("^seq .seg:depth(1) .block[role='assistant']")
+ctx.select("( d1, .block ) +assistant")
 ```
 
 ### Context Position
@@ -113,11 +113,11 @@ ctx.select("^seq .seg .block:nth(2)")
 ### Snapshot Traversal
 ```javascript
 // Current snapshot (default)
-ctx.select("^seq .seg:depth(1)")
-ctx.select("@t0 ^seq .seg:depth(1)")
+ctx.select("( d1 )")
+ctx.select("@t0 ( d1 )")
 
 // Previous snapshot
-ctx.select("@t-1 ^seq .seg:depth(1)")
+ctx.select("@t-1 ( d1 )")
 
 // Specific cycle
 ctx.select("@c42 ^seq .seg")
@@ -129,8 +129,8 @@ ctx.select("@* #node123abc")
 ### Historical Analysis
 ```javascript
 // Compare current vs previous assistant response
-current = ctx.select("@t0 ^seq .seg:depth(1) .block[role='assistant']")
-previous = ctx.select("@t-1 ^seq .seg:depth(1) .block[role='assistant']")
+current = ctx.select("@t0 ( d1, .block ) +assistant")
+previous = ctx.select("@t-1 ( d1, .block ) +assistant")
 
 // Track node evolution across time
 ctx.select("@* ^seq .block[id='summary_v1']")
@@ -180,13 +180,13 @@ ctx.select("^root .block[retry_count>0]")
 ### Multi-condition Filters
 ```javascript
 // High-priority user messages from recent turns
-ctx.select("^seq .seg:depth(1,2,3) .block[role='user'][priority>=5]")
+ctx.select("( d1..d3, .block ) +user[priority>=5]")
 
 // Assistant responses that are about to expire
-ctx.select("^seq .block[role='assistant'][ttl<=2]")
+ctx.select("^seq .block +assistant[ttl<=2]")
 
 // Tool calls with specific status
-ctx.select("^root .block[role='tool'][kind='call'][status='pending']")
+ctx.select("^root .block[kind='call'] +tool[status='pending']")
 
 // Long-lived system context
 ctx.select("^sys .block[ttl=null][priority>=7]")
@@ -204,7 +204,7 @@ ctx.select("^seq > .seg")
 ctx.select("^seq .block")
 
 // Mixed patterns
-ctx.select("^seq .seg > .cont > .block[role='user']")
+ctx.select("^seq .seg > .cont > .block +user")
 ctx.select("^ah :pre > .block[kind='context']")
 ```
 
@@ -218,7 +218,7 @@ ctx.select("^ah :pre > .block[kind='context']")
 ctx.select("^root .block[kind='summary']")
 
 // Recent user questions for retrieval
-ctx.select("^seq .seg:depth(1,2,3) .block[role='user'][kind='text']")
+ctx.select("( d1..d3, .block[kind='text'] ) +user")
 
 // Retrieved documents in current turn
 ctx.select("^ah .block[kind='retrieved_doc']")
@@ -233,20 +233,20 @@ ctx.select("^root .block[kind='rag_context'][ttl<=1]")
 const turns = ctx.select("^seq .seg")
 
 // User-assistant pairs (assuming alternating pattern)
-const userMsgs = ctx.select("^seq .seg .block[role='user']")
-const assistantMsgs = ctx.select("^seq .seg .block[role='assistant']")
+const userMsgs = ctx.select("^seq .seg .block +user")
+const assistantMsgs = ctx.select("^seq .seg .block +assistant")
 
 // Topic changes (assuming topic attribute)
 ctx.select("^seq .block[topic!='previous_topic']")
 
 // Long conversations
-ctx.select("^seq .seg:depth(10,11,12,13,14,15)")
+ctx.select("( d10..d15 )")
 ```
 
 ### Error Handling & Debugging
 ```javascript
 // Failed tool calls
-ctx.select("^root .block[role='tool'][status='error']")
+ctx.select("^root .block +tool[status='error']")
 
 // Retried operations
 ctx.select("^root .block[retry_count>0]")
@@ -265,7 +265,7 @@ const expiring = ctx.select("^root .block[ttl<=3]")
 const lowPriority = ctx.select("^root .block[priority<=2]")
 
 // Memory management
-const oldContent = ctx.select("^seq .seg:depth(20,21,22,23,24,25)")
+const oldContent = ctx.select("( d20..d25 )")
 const systemCore = ctx.select("^sys .block[priority>=9]")
 
 // Performance monitoring
@@ -285,7 +285,7 @@ function getRelevantContext(conversationPhase) {
     case 'initial':
       return ctx.select("^sys .block[kind='system_prompt']")
     case 'ongoing':
-      return ctx.select("^seq .seg:depth(1,2,3) .block")
+      return ctx.select("( d1..d3, .block )")
     case 'summary':
       return ctx.select("^root .block[kind='summary']")
   }
@@ -297,7 +297,7 @@ function getRelevantContext(conversationPhase) {
 // Select varying depths based on context length
 function getContextByBudget(maxTokens) {
   for (let depth = 1; depth <= 10; depth++) {
-    const selector = `^seq .seg:depth(${Array.from({length: depth}, (_, i) => i + 1).join(',')})`
+    const selector = `( d1..d${depth} )`
     const nodes = ctx.select(selector)
     const tokens = estimateTokens(nodes)
     if (tokens > maxTokens) {
@@ -326,13 +326,13 @@ const criticalNodes = ctx.select("^root .block[urgency='critical']")
 ### Efficient Queries
 ```javascript
 // ✅ Good: Specific region and constraints
-ctx.select("^seq .seg:depth(1,2,3) .block[role='user']")
+ctx.select("( d1..d3, .block ) +user")
 
 // ❌ Avoid: Overly broad queries
 ctx.select("@* ^root *")
 
 // ✅ Good: Use most specific selectors
-ctx.select("^ah .cont > .block[role='assistant']")
+ctx.select("^ah .cont > .block +assistant")
 
 // ❌ Avoid: Multiple descendant traversals
 ctx.select("^root .seg .cont .block .nested")
@@ -342,7 +342,7 @@ ctx.select("^root .seg .cont .block .nested")
 ```javascript
 // Cache frequently accessed nodes
 const systemContext = ctx.select("^sys .block[priority>=8]")
-const recentTurns = ctx.select("^seq .seg:depth(1,2,3)")
+const recentTurns = ctx.select("( d1..d3 )")
 
 // Use node IDs for quick lookups
 const importantNodeIds = ctx.select("^root .block[priority>=9]").map(n => n.id)
@@ -357,26 +357,26 @@ const quickLookup = importantNodeIds.map(id => ctx.select(`#${id}`))
 ```javascript
 // Traditional message array to PACT
 const messages = [
-  {role: 'user', content: 'Hello'},
-  {role: 'assistant', content: 'Hi there!'},
-  {role: 'user', content: 'How are you?'}
+  {tag: 'user', content: 'Hello'},
+  {tag: 'assistant', content: 'Hi there!'},
+  {tag: 'user', content: 'How are you?'}
 ]
 
 // PACT equivalent queries:
-const userMessages = ctx.select("^seq .block[role='user']")
-const assistantMessages = ctx.select("^seq .block[role='assistant']")
+const userMessages = ctx.select("^seq .block +user")
+const assistantMessages = ctx.select("^seq .block +assistant")
 const allMessages = ctx.select("^seq .block")
 ```
 
 ### From Other Context Systems
 ```javascript
 // Anthropic-style context
-const systemPrompt = ctx.select("^sys .block[role='system']")
-const conversation = ctx.select("^seq .block[role='user'], ^seq .block[role='assistant']")
+const systemPrompt = ctx.select("^sys .block +system")
+const conversation = ctx.select("^seq .block +user, ^seq .block +assistant")
 
 // OpenAI-style messages
 const chatHistory = ctx.select("^seq .block").map(node => ({
-  role: node.role,
+  tag: node.tag,
   content: node.content
 }))
 ```

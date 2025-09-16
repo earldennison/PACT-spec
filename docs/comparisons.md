@@ -11,7 +11,7 @@ This section summarizes differences between PACT and notable prior systems.
 - **Limitations**: Heuristic, lossy, non-deterministic ordering.  
 
 **PACT**:  
-- Defines explicit structure (`mt`, `mc`, `cb`) with placement invariants.  
+- Defines explicit structure (`seg`, `cont`, `block`) with placement invariants.
 - Deterministic lifecycle (TTL, pruning, sealing).  
 - Provides selectors and diffs for reproducibility.  
 

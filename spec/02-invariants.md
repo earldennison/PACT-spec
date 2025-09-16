@@ -47,7 +47,6 @@ These aliases are **syntactic sugar only**. They MUST NOT confer capabilities, m
 
 For any selector `S`, replacing:
 - `^ah` with `depth(0)`,
-- any `^seq` reference to a specific turn with `:depth(n)` for some `n ≥ 1`,
 - `^sys` with `depth(-1)`
 
 MUST select the identical node(s). History selection uses `@t…` and is not encoded by depth.
@@ -57,9 +56,59 @@ MUST select the identical node(s). History selection uses `@t…` and is not enc
 ### 3.1 Stable ID (Global Uniqueness)
 Each node MUST have a stable `id` (hash or UUID). The `id` MUST NOT change during the node's lifetime within a snapshot, and MUST be globally unique across the addressable history (no reuse across live snapshots). Implementations MAY assign new IDs during internal rematerialization as long as final snapshots are byte-stable.
 
+### 3.1.1 Normative Rule — `parent_id`
+Every node MUST have a `parent_id` that references its immediate parent’s `id`, except designated root nodes, which MUST have `parent_id = null`.
+
+“Root” means any top‑level container defined by the implementation (e.g., the episode’s top‑level containers). Roots are the only nodes allowed to have `parent_id = null`.
+
 ### 3.2 Required Headers
 Each node MUST include:  
 `id`, `nodeType`, `offset`, `ttl`, `priority`, `cycle`, `created_at_ns`, `created_at_iso`, `creation_index`.
+
+#### 3.2.a Structural headers at commit (t0)
+At the snapshot boundary (`@t0`), each node’s structural headers are defined as:
+
+- id: string — provider-/system-unique (no reuse across live snapshots)
+- nodeType: enum {`seg`, `cont`, `block`, ...}
+- parent_id: string | null — immediate parent container’s `id` at commit time; roots use `null` (only top‑level containers are roots)
+- offset: int — position relative to the parent’s ordered children
+- ttl: number | null — lifecycle in episodes (see 03 – Lifecycle §3.1)
+- created_at_ns: uint64 — monotonic timestamp
+- creation_index: uint — tie‑breaker within the same timestamp window
+
+Notes:
+- `cad` (cadence) is a positive integer when present; default behavior is equivalent to `cad=1` if omitted (see 03 – Lifecycle §3.4). Implementations MAY store this under the header name `cad`.
+- `parent_id` is a machine header for determinism and diffs. It need not be a user‑addressable selector primitive and MAY be omitted from human‑friendly renders when it can be derived unambiguously from the tree shape.
+
+#### 3.2.b Structural header constraints (Normative)
+parent_id ⇔ root:
+- `parent_id = null` ⇔ node is a root
+- `parent_id ≠ null` ⇔ node is NOT a root
+
+Parent existence and capability:
+- The referenced parent MUST exist in the same commit/episode and MUST be container‑capable (may hold children).
+
+No cycles:
+- A node MUST NOT be its own parent.
+- A node MUST NOT be an ancestor of its parent.
+
+Offset frame and determinism:
+1) `parent_id` defines the reference frame for `offset`. Changing `parent_id` implies recomputing `offset` in the new parent’s frame.
+2) Ordering is governed by the parent’s canonical child‑ordering invariants (offset ↑, created_at_ns ↑, creation_index ↑, id ↑). `parent_id` does not alter ordering rules; it only names the frame.
+
+Instances and projections:
+3) Cloned/projection instances (from cadence/TTL overlap) each have distinct `id` values and a `parent_id` consistent with their realized placement.
+
+Selector interface:
+4) Selector semantics remain structural; authoring is not required to use IDs. `parent_id` is a machine header for determinism and diffs, not a user‑facing selector primitive.
+
+Schema hint (non‑normative):
+```yaml
+parent_id:
+  type: [string, "null"]
+  description: "Immediate parent’s id; null only for top‑level roots."
+  required: true
+```
 
 #### 3.2.1 Attribute Stability Table (Normative)
 
@@ -67,6 +116,7 @@ Each node MUST include:
 |------------------|----------|----------|------------------------------------------|-------|
 | `id`             | string   | MUST     | Immutable within a snapshot               | Opaque identifier (UUID/hash) |
 | `nodeType`       | string   | MUST     | Immutable                                 | Canonical or namespaced user type |
+| `parent_id`      | string∣null | MUST  | Write‑protected (changes only via re‑parent) | Machine header; not a selector primitive |
 | `offset`         | number   | MUST     | Immutable post-creation within a cycle    | `<0` pre, `0` core (`cont`), `>0` post |
 | `ttl`            | number∣null | MUST  | MAY change by lifecycle evaluation        | Cycle-based TTL semantics |
 | `priority`       | number   | MUST     | Immutable unless policy updates           | Used for pruning order |
@@ -91,7 +141,7 @@ Implementations MAY define user types (e.g., `block:summary`). Selectors MUST st
 ### 3.5 Attribute Creation and Stability (Normative)
 - Source of truth: Selector attributes map to node headers. Implementations MUST populate all mandatory headers; optional headers MAY be omitted.
 - Namespacing: Custom attributes MUST be namespaced (e.g., `content_*`, `data_*`, `block:foo`) and MUST NOT collide with reserved names.
-- Types: Header types are stable: `offset` | `ttl` | `priority` | `cycle` | `created_at_ns` | `creation_index` are numeric; `id` | `nodeType` | `created_at_iso` | `role` | `kind` are strings. Custom attributes SHOULD use a single stable type across a node’s lifetime.
+- Types: Header types are stable: `offset` | `ttl` | `priority` | `cycle` | `created_at_ns` | `creation_index` are numeric; `id` | `nodeType` | `created_at_iso` | `kind` are strings. Custom attributes SHOULD use a single stable type across a node’s lifetime.
 - Immutability: Creation-time headers MUST remain stable; only lifecycle fields (e.g., `ttl`) MAY change per §3 and §5.
 - Defaults and nulls: Missing optional attributes compare as `null` per Selectors §5.5; required headers MUST be present (non-null).
 - Serialization: Attributes MUST serialize canonically and deterministically; unknown attributes MUST NOT affect canonical ordering.
@@ -119,11 +169,11 @@ A segment (`seg`) with content-bearing nodes at negative and positive offsets, a
   "id": "seg:42",
   "nodeType": "seg",
   "children": [
-    { "id": "block:pre1",  "nodeType": "block", "offset": -1, "role": "system",   "kind": "text",   "content": "Contextual hint" },
+    { "id": "block:pre1",  "nodeType": "block", "offset": -1,   "kind": "text",   "content": "Contextual hint" },
     { "id": "cont:42",    "nodeType": "cont", "offset": 0,  "children": [
-      { "id": "block:u42", "nodeType": "block",               "role": "user",     "kind": "text",   "content": "Hello" }
+      { "id": "block:u42", "nodeType": "block",                "kind": "text",   "content": "Hello" }
     ] },
-    { "id": "block:post1", "nodeType": "block", "offset": 1,  "role": "tool",     "kind": "result", "content": "status: ok" }
+    { "id": "block:post1", "nodeType": "block", "offset": 1,    "kind": "result", "content": "status: ok" }
   ]
 }
 ```
@@ -165,6 +215,24 @@ Prior to commit, nodes MAY be re‑parented (moved to a different parent) provid
 3. Conformance is evaluated on snapshot structure and serialized bytes, not internal mutation mechanics.
 
 After sealing, `cont[offset=0]` cores are immutable (§6.4). Non‑core nodes MAY be attached or detached relative to historical turns by adding/removing nodes (e.g., post‑context attachments); sealed records are not mutated in place.
+
+#### 4.5.1 Operation: move(node, to_parent, to_offset)
+Preconditions:
+- `to_parent` exists and is container‑capable; `node` is not an ancestor of `to_parent`.
+
+Steps:
+1) Detach `node` from `parent_id`’s children (preserve sibling order of the remaining children).
+2) Insert `node` into `to_parent.children` at `to_offset` (or the normalized end if out‑of‑bounds).
+3) Set `node.parent_id := to_parent.id`; recompute `node.offset` in the new parent’s frame per §4.3.
+
+Diff emission (minimum):
+- `parent_changed: { previous_parent_id, new_parent_id }`
+- `offset_changed: { previous_offset, new_offset }`
+
+Errors:
+- `INVALID_PARENT` — `to_parent` missing or not in the same commit/episode
+- `PARENT_NOT_CONTAINER` — `to_parent` is not container‑capable
+- `CYCLE_DETECTED` — operation would create a cycle (e.g., `node` becomes ancestor/descendant of itself)
 
 ## 5. Lifecycle
 ### 5.1 TTL
@@ -250,9 +318,9 @@ Selectors MUST support:
 - Roots: `^sys`, `^seq`, `^ah`, `^root`
 - Types: `.seg`, `.cont`, `.block`
 - IDs: `#<id>`
-- Pseudos: `:pre`, `:core`, `:post`, `:depth(n)`, `:first`, `:last`, `:nth(n)`
-- Attributes: `[offset] [ttl] [priority] [cycle] [nodeType] [role] [kind]`
-- Combinators: descendant (`A B`), child (`A > B`)
+- Predicates: `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)`
+- Attributes: `[offset] [ttl] [cad] [priority] [cycle] [nodeType] [kind]`
+- Structural hops: descendant (`A B`), child (`A > B`)
 
 ### 9.3 Diffs
 `ctx.diff(A,B,selector)` MUST detect changes by node `id` and report both content and structural changes. At minimum, diffs SHOULD include:
@@ -348,7 +416,7 @@ Each `block` serializes to an object:
 
 3. Preserves canonical sibling order.
 
-4. Preserves roles and IDs.
+4. Preserves IDs.
 
 5. Produces identical output for identical snapshots.
 
@@ -366,7 +434,7 @@ Given this example snapshot structure at `@t0`:
 
 ```json
 {
-  "spec_version": "PACT/0.1.0",
+  "spec_version": "PACT/1.0.0",
   "root": {
     "id": "root-1",
     "children": [
@@ -374,7 +442,7 @@ Given this example snapshot structure at `@t0`:
         "id": "sys-1",
         "nodeType": "^sys",
         "children": [
-          {"id": "block:sysA", "role": "system", "kind": "text", "offset": 0, "content": "You are a helpful assistant."}
+          {"id": "block:sysA", "kind": "text", "offset": 0, "content": "You are a helpful assistant."}
         ]
       },
       {
@@ -385,14 +453,14 @@ Given this example snapshot structure at `@t0`:
             "id": "seg:1",
             "nodeType": "seg",
             "children": [
-              {"id": "block:u1", "role": "user", "kind": "text", "offset": 0, "content": "Hello"}
+              {"id": "block:u1", "kind": "text", "offset": 0, "content": "Hello"}
             ]
           },
           {
             "id": "seg:2",
             "nodeType": "seg",
             "children": [
-              {"id": "block:a1", "role": "assistant", "kind": "text", "offset": 0, "content": "Hi! How can I help?"}
+              {"id": "block:a1", "kind": "text", "offset": 0, "content": "Hi! How can I help?"}
             ]
           }
         ]
@@ -401,7 +469,7 @@ Given this example snapshot structure at `@t0`:
         "id": "ah-1",
         "nodeType": "^ah",
         "children": [
-          {"id": "block:u2", "role": "user", "kind": "text", "offset": 0, "content": "Summarize the above."}
+          {"id": "block:u2", "kind": "text", "offset": 0, "content": "Summarize the above."}
         ]
       }
     ]
@@ -413,10 +481,10 @@ The provider thread serialization MUST be in this exact order (regions: `^sys` �
 
 ```json
 [
-  {"id": "block:sysA", "role": "system", "kind": "text", "content": "You are a helpful assistant."},
-  {"id": "block:u1",  "role": "user",   "kind": "text", "content": "Hello"},
-  {"id": "block:a1",  "role": "assistant", "kind": "text", "content": "Hi! How can I help?"},
-  {"id": "block:u2",  "role": "user",   "kind": "text", "content": "Summarize the above."}
+  {"id": "block:sysA",  "kind": "text", "content": "You are a helpful assistant."},
+  {"id": "block:u1",    "kind": "text", "content": "Hello"},
+  {"id": "block:a1",    "kind": "text", "content": "Hi! How can I help?"},
+  {"id": "block:u2",    "kind": "text", "content": "Summarize the above."}
 ]
 ```
 
@@ -428,7 +496,7 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
 
 ```json
 {
-  "spec_version": "PACT/0.1.0",
+  "spec_version": "PACT/1.0.0",
   "root": {
     "id": "root-2",
     "children": [
@@ -436,7 +504,7 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
         "id": "sys-2",
         "nodeType": "^sys",
         "children": [
-          {"id": "block:sysB", "role": "system", "kind": "text", "offset": 0, "content": "System header B"}
+          {"id": "block:sysB",  "kind": "text", "offset": 0, "content": "System header B"}
         ]
       },
       {
@@ -447,9 +515,9 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
             "id": "seg:10",
             "nodeType": "seg",
             "children": [
-              {"id": "block:pre1",  "role": "system",   "kind": "text",   "offset": -1, "content": "Pre-context hint"},
-              {"id": "block:core1", "role": "user",     "kind": "text",   "offset": 0,  "content": "Hello with context"},
-              {"id": "block:post1", "role": "tool",     "kind": "result", "offset": 1,  "content": "status: ok"}
+              {"id": "block:pre1",     "kind": "text",   "offset": -1, "content": "Pre-context hint"},
+              {"id": "block:core1",  "kind": "text",   "offset": 0,  "content": "Hello with context"},
+              {"id": "block:post1",    "kind": "result", "offset": 1,  "content": "status: ok"}
             ]
           }
         ]
@@ -458,9 +526,9 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
         "id": "ah-2",
         "nodeType": "^ah",
         "children": [
-          {"id": "block:pre2",  "role": "system",   "kind": "text",   "offset": -1, "content": "AH pre"},
-          {"id": "block:core2", "role": "user",     "kind": "text",   "offset": 0,  "content": "Working..."},
-          {"id": "block:post2", "role": "assistant", "kind": "text",   "offset": 1,  "content": "Interim note"}
+          {"id": "block:pre2",   "kind": "text",   "offset": -1, "content": "AH pre"},
+          {"id": "block:core2",  "kind": "text",   "offset": 0,  "content": "Working..."},
+          {"id": "block:post2",  "kind": "text",   "offset": 1,  "content": "Interim note"}
         ]
       }
     ]
@@ -472,13 +540,13 @@ The provider thread serialization MUST be in this exact order (regions: `^sys` �
 
 ```json
 [
-  {"id": "block:sysB",  "role": "system",   "kind": "text",   "content": "System header B"},
-  {"id": "block:pre1",  "role": "system",   "kind": "text",   "content": "Pre-context hint"},
-  {"id": "block:core1", "role": "user",     "kind": "text",   "content": "Hello with context"},
-  {"id": "block:post1", "role": "tool",     "kind": "result", "content": "status: ok"},
-  {"id": "block:pre2",  "role": "system",   "kind": "text",   "content": "AH pre"},
-  {"id": "block:core2", "role": "user",     "kind": "text",   "content": "Working..."},
-  {"id": "block:post2", "role": "assistant", "kind": "text",   "content": "Interim note"}
+  {"id": "block:sysB",    "kind": "text",   "content": "System header B"},
+  {"id": "block:pre1",     "kind": "text",   "content": "Pre-context hint"},
+  {"id": "block:core1",   "kind": "text",   "content": "Hello with context"},
+  {"id": "block:post1",    "kind": "result", "content": "status: ok"},
+  {"id": "block:pre2",    "kind": "text",   "content": "AH pre"},
+  {"id": "block:core2",   "kind": "text",   "content": "Working..."},
+  {"id": "block:post2",   "kind": "text",   "content": "Interim note"}
 ]
 ```
 

@@ -15,6 +15,7 @@ MUST (mark one):
 - [ ] Yes  [ ] No — Each `seg` has exactly one `cont @ offset=0`.
 - [ ] Yes  [ ] No — Canonical sibling order enforced: `offset` → `created_at_ns` → `creation_index` → `id`.
 - [ ] Yes  [ ] No — TTL expiry + cascade at commit; core container bytes immutable after commit; snapshots immutable.
+- [ ] Yes  [ ] No — `parent_id` is tracked (or derivable) and enforced as the reference frame for `offset`; move/re‑parent semantics follow 02 – Invariants §4.5.1.
 - [ ] Yes  [ ] No — If pruning is implemented, it is deterministic (**priority → age → id**).
 - [ ] Yes  [ ] No — Serialization has no side effects; diffs compare by `id`; Invalid selectors MUST raise errors.
 
@@ -26,21 +27,21 @@ Reference: 02 – Invariants §§2–9, §11.
 
 ---
 
-## B. Selectors (from 04 – Context Selectors)
+## B. Queries (from 04 – Context Queries)
 
 MUST (mark one):
 - [ ] Yes  [ ] No — Are roots `^sys`, `^seq`, `^ah`, `^root` accepted as structural inputs (normalized output prefers `depth(n)`/`.seg`)?
 - [ ] Yes  [ ] No — Are types `.seg`, `.cont`, `.block` supported, and does type sugar `.block:TypeName` normalize to `[nodeType='TypeName']`?
 - [ ] Yes  [ ] No — Do ID selectors `#<id>` match exactly (case‑sensitive)?
-- [ ] Yes  [ ] No — Are pseudos `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)` implemented?
-- [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]` supported with `= != < <= > >=` and correct numeric/string semantics?
-- [ ] Yes  [ ] No — Are combinators descendant (`A B`) and child (`A > B`) supported?
-- [ ] Yes  [ ] No — Are `@t0`, `@t-1`, `@cN`, `@*` supported, with default `@t0` if omitted?
+- [ ] Yes  [ ] No — Are predicates `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)` implemented?
+- [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [cad] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]` supported with `= != < <= > >=` and correct numeric/string semantics?
+- [ ] Yes  [ ] No — Are structural hops for descendant (`A B`) and child (`A > B`) supported?
+- [ ] Yes  [ ] No — Are `@t0`, `@t-1`, `@cN`, `@*` supported, with default working state if omitted?
 - [ ] Yes  [ ] No — Are snapshot ranges `@tA..B` and `@tA:B` supported with inclusive semantics, and do both operators (`..`, `:`) produce identical results?
 - [ ] Yes  [ ] No — Are results ordered canonically and queries side‑effect free?
 - [ ] Yes  [ ] No — Do invalid selectors raise errors?
 
-Reference: 04 – Context Selectors §3–§7.
+Reference: 04 – Context Queries §3–§7.
 
 ---
 
@@ -48,11 +49,12 @@ Reference: 04 – Context Selectors §3–§7.
 
 MUST (mark one):
 - [ ] Yes  [ ] No — Does each cycle produce exactly one snapshot?
-- [ ] Yes  [ ] No — Does the snapshot boundary follow the Commit Sequence, with `@t0` re‑serializing to the exact provider bytes for that cycle (async persistence allowed)?
+- [ ] Yes  [ ] No — Does the snapshot boundary follow the Commit Sequence, with the sealed snapshot (`@t-1`) re‑serializing to the exact provider bytes for that cycle (async persistence allowed)?
 - [ ] Yes  [ ] No — Are snapshots byte‑stable and serialization side‑effect free?
 - [ ] Yes  [ ] No — Does export include all nodes, required metadata, and canonical order?
 - [ ] Yes  [ ] No — Do diffs use node `id` for identity?
 - [ ] Yes  [ ] No — Do diff outputs use exactly: `added` (string[]), `removed` (string[]), `changed` ({id: string, fields: string[]}[]), preserving the newer snapshot’s order?
+- [ ] Yes  [ ] No — On structural moves, diffs include `parent_changed {previous_parent_id, new_parent_id}` and `offset_changed {previous_offset, new_offset}` (at minimum).
 
 SHOULD (mark one):
 - [ ] Yes  [ ] No — Does import/replay yield identical serialization as the original export?
@@ -98,7 +100,7 @@ To claim compliance with Region Alias Equivalence, an implementation MUST:
 
 ### Lifecycle — MUST
 1) Active Turn permits arbitrary edits (add/remove/re-parent/replace) within invariants.  
-2) Commit produces a new `.seg:depth(1)`; prior `.seg:depth(k)` shift to `k+1`.  
+2) Commit produces a new `seg` at `depth(1)`; prior `seg` at `depth(k)` shift to `k+1`.  
 3) `cont[offset=0]` bytes are immutable after commit.
 
 ### Selectors — MUST

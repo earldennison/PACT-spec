@@ -60,9 +60,9 @@ Selectors MUST support:
 - Roots: `^sys`, `^seq`, `^ah`, `^root`  
 - Types: `.seg`, `.cont`, `.block`  
 - IDs: `#<id>`  
-- Pseudos: `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)`  
-- Attributes: `[offset] [ttl] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [kind]`  
-- Combinators: descendant (`A B`), child (`A > B`)  
+- Predicates: `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)`  
+- Attributes: `[offset] [ttl] [cad] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]`  
+- Structural hops: descendant (`A B`), child (`A > B`)  
 
 ### 3.3 Debug Queries
 Examples:
@@ -70,8 +70,8 @@ Examples:
 # all pre-context blocks in active head
 ctx.select("^ah :pre .block")
 
-# last two historical segments, assistant responses only
-ctx.select("^seq .seg:depth(1,2) .block[role='assistant']")
+# last two historical segments, assistant responses only (using tag filter)
+ctx.select("@t0 ( d1..d2, .seg .block ) +assistant")
 
 # expired or soon-to-expire nodes
 ctx.select("^root .block[ttl<=1]")
@@ -154,7 +154,7 @@ Debugging and diffs are deterministic across runs.
 
 ### Errors specific to Depth Range hops
 
-- E_DEPTH_NEGATIVE — depth values in `dA..dB` MUST be non‑negative.
+- E_DEPTH_NEGATIVE — depth values in `dA..dB` MUST be ≥ -1 (`-1` is the system anchor).
 - E_DEPTH_RANGE_INVALID — inverted range (`A > B`).
 - E_DEPTH_NOT_INT — non‑integer endpoint in `dA..dB`.
 

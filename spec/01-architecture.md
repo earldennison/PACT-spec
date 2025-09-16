@@ -123,7 +123,7 @@ Placement and ordering rules apply recursively in every container:
 This nested invariance ensures a uniform ternary structure across the tree.
 
 ### 3.4 Region Aliases (Normative)
-The following aliases are structural sugar over depth (also see 04 – Selectors):
+The following aliases are structural sugar over depth (also see 04 – Context Queries):
 
 - `^sys` ≡ `depth(-1)`
 - `^ah`  ≡ `depth(0)`
