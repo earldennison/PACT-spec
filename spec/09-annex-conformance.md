@@ -4,6 +4,8 @@
 
 This annex aggregates all conformance requirements into one actionable checklist. A new runtime SHOULD be able to implement PACT without reading prose by following the items below end-to-end.
 
+Clarification: PACT governs structural invariants, addressing, selection, and snapshot/commit behavior only. Policies and implementations for node deletion, pruning, retention, or archival are intentionally out of scope for PACT and are left to implementations and application-layer policies.
+
 ---
 
 ## A. Core Structure & Invariants (from 02 – Invariants)
@@ -14,16 +16,25 @@ MUST (mark one):
 - [ ] Yes  [ ] No — Nodes have required headers (`id`, `nodeType`, `offset`, `ttl`, `priority`, `cycle`, `created_at_ns`, `created_at_iso`, `creation_index`).
 - [ ] Yes  [ ] No — Each `seg` has exactly one `cont @ offset=0`.
 - [ ] Yes  [ ] No — Canonical sibling order enforced: `offset` → `created_at_ns` → `creation_index` → `id`.
-- [ ] Yes  [ ] No — TTL expiry + cascade at commit; core container bytes immutable after commit; snapshots immutable.
+- [ ] Yes  [ ] No — Core container bytes are immutable after commit; snapshots are immutable.
 - [ ] Yes  [ ] No — `parent_id` is tracked (or derivable) and enforced as the reference frame for `offset`; move/re‑parent semantics follow 02 – Invariants §4.5.1.
-- [ ] Yes  [ ] No — If pruning is implemented, it is deterministic (**priority → age → id**).
+- [ ] Yes  [ ] No — Every node MUST include a `parent_id` attribute except for the global root. `parent_id` is the canonical frame of reference for offsets and ordering; offsets are relative to the referenced parent. Implementations MAY synthesize `parent_id` for imported content, but serialized nodes in snapshots MUST preserve explicit `parent_id` values for deterministic ordering and rehydration.
 - [ ] Yes  [ ] No — Serialization has no side effects; diffs compare by `id`; Invalid selectors MUST raise errors.
 
 SHOULD (mark one):
 - [ ] Yes  [ ] No — Cross‑region relocations realized as remove+add (no observable in‑place region mutation across snapshots).
-- [ ] Yes  [ ] No — Reference safety preserved (or expiry deferred) when liveness is uncertain.
 
 Reference: 02 – Invariants §§2–9, §11.
+
+Removed tests: PACT conformance does not include tests for node pruning, expiry, or retention. Any tests asserting pruning or expiry behavior are out-of-scope for the core PACT conformance suite and should be moved to vendor-specific or implementation-specific test suites.
+
+Mandatory conformance tests (core) — updated:
+
+- Canonical ordering unit test — sibling sort-order deterministic.
+- Byte-stable serialization test — serializing the same snapshot twice must produce identical bytes.
+- Depth / range fixtures — selection by depth/range returns deterministic IDs given a snapshot.
+- Selector alias test — selector aliases are equivalent (e.g., depth(0) ↔ ^ah).
+- Invalid placement rejection — creating an invalid placement (e.g., duplicate container offset) returns the designated error code.
 
 ---
 
@@ -31,7 +42,7 @@ Reference: 02 – Invariants §§2–9, §11.
 
 MUST (mark one):
 - [ ] Yes  [ ] No — Are roots `^sys`, `^seq`, `^ah`, `^root` accepted as structural inputs (normalized output prefers `depth(n)`/`.seg`)?
-- [ ] Yes  [ ] No — Are types `.seg`, `.cont`, `.block` supported, and does type sugar `.block:TypeName` normalize to `[nodeType='TypeName']`?
+- [ ] Yes  [ ] No — Are types `.seg`, `.cont`, `.block` supported, and do `.TypeName` anchors normalize to `[nodeType='TypeName']`?
 - [ ] Yes  [ ] No — Do ID selectors `#<id>` match exactly (case‑sensitive)?
 - [ ] Yes  [ ] No — Are predicates `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)` implemented?
 - [ ] Yes  [ ] No — Are attributes `[offset] [ttl] [cad] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]` supported with `= != < <= > >=` and correct numeric/string semantics?
@@ -110,13 +121,18 @@ To claim compliance with Region Alias Equivalence, an implementation MUST:
 
 ---
 
+### Example JSON node
+
+[See non-normative annex: Adopter extensions — `kind` historical examples]
+
+
 ## Annex – Editorial Process & Conformance Notes
 
 ### Single-Source Normative References
 - Normative definitions for the depth axis, alias equivalence, and commit/immutability reside in:
   - 01 – Architecture / Regions & Addressing
-  - 04 – Lifecycle / Active Turn & Commit
-  - 03 – Selectors & Grammar / Overview + Snapshot & Range Semantics
+  - 03 – Lifecycle / Active Turn & Commit
+  - 04 – Context Queries / Overview + Snapshot & Range Semantics
 - Other chapters MUST link to these as “Normative Reference: see …” rather than re‑stating. Remove duplicate normative paragraphs and replace with a one‑line normative reference.
 
 Action

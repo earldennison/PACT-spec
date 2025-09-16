@@ -17,14 +17,13 @@ Every node MUST carry at least:
 - `nodeType` — canonical or user-assigned (see Glossary: NodeType)  
 - `offset` — relative offset within parent  
 - `ttl` — remaining or expiry cycle  
-- `priority` — pruning order  
+- `priority` — implementation-defined policy value  
 - `cycle` — cycle in which node was created  
 - `created_at_ns` — monotonic timestamp  
 - `created_at_iso` — ISO8601 string  
 
 ### 2.2 Optional Fields
 Nodes MAY also carry:
-- `kind` (e.g., `"text"|"call"|"result"`)  
 - `content_hash` (stable hash of payload for diffing)  
 - `provenance` (who/what produced the node, e.g., `"model:gpt-5"`)  
 
@@ -39,12 +38,11 @@ Metadata attached at creation MUST remain stable across cycles, except for `ttl`
 | `nodeType`       | string   | MUST     | Immutable                                 | None |
 | `offset`         | number   | MUST     | Immutable post-creation within a cycle    | Primary sibling order key (§4.3) |
 | `ttl`            | number∣null | MUST  | MAY change by lifecycle evaluation        | None |
-| `priority`       | number   | MUST     | Immutable unless policy updates           | Pruning policy only; not ordering |
+| `priority`       | number   | MUST     | Immutable unless policy updates           | Implementation policy only; not ordering |
 | `cycle`          | number   | MUST     | Immutable                                 | None |
 | `created_at_ns`  | number   | MUST     | Immutable                                 | Secondary sibling order key (§4.3) |
 | `created_at_iso` | string   | MUST     | Immutable                                 | None |
 | `creation_index` | number   | MUST     | Immutable                                 | Tertiary sibling order key (§4.3) |
-| `kind`           | string   | MAY      | Immutable                                 | None |
 | `content_hash`   | string   | MAY      | MAY change when content changes           | None (explicitly excluded) |
 | Namespaced custom (`data_*`, `content_*`) | any | MAY | SHOULD remain stable per meaning | None; unknown attributes MUST NOT affect canonical ordering |
 
@@ -59,7 +57,7 @@ Given a fixed snapshot and selector, the result MUST always be the same list of 
 Selectors MUST support:
 - Roots: `^sys`, `^seq`, `^ah`, `^root`  
 - Types: `.seg`, `.cont`, `.block`  
-- IDs: `#<id>`  
+- IDs: `{ id="…" }`  
 - Predicates: `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)`  
 - Attributes: `[offset] [ttl] [cad] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]`  
 - Structural hops: descendant (`A B`), child (`A > B`)  
@@ -123,7 +121,7 @@ Snapshots are byte-stable: given the same input, serialization is identical.
 
 Selectors are pure: repeated queries yield the same results.
 
-Diffs are complete: all changes are attributable to TTL, pruning, or mutation during the Active Turn.
+Diffs are complete: all changes are attributable to metadata updates or mutation during the Active Turn.
 
 Debugging is structural: the same invariants apply regardless of LLM stochasticity.
 
@@ -147,7 +145,7 @@ Debugging and diffs are deterministic across runs.
 
 ### Errors specific to Snapshot Ranges
 
-- E_SNAPSHOT_RANGE_KIND_MISMATCH — mixed "@t..@c" endpoints are invalid.
+- E_SNAPSHOT_RANGE_PREFIX_MISMATCH — mixed "@t..@c" endpoints are invalid.
 - E_SNAPSHOT_RANGE_WILDCARD — "@*" is not allowed inside a range.
 - E_SNAPSHOT_RANGE_LIMIT — expanded snapshots exceed maxSnapshots.
 - E_SELECTOR_INVALID — malformed selector or grammar violation.

@@ -29,7 +29,6 @@ def calculate_content_hash(node):
     # Extract only content-relevant fields, excluding metadata
     hashable_content = {
         'content': node.get('content', ''),
-        'kind': node.get('kind', ''),
         # Include any custom content attributes
         **{k: v for k, v in node.items() 
            if k.startswith('content_') or k.startswith('data_')}
@@ -234,7 +233,7 @@ def serialize_snapshot(tree: Dict[str, Any]) -> bytes:
                 normalized[field] = node[field]
         
         # Content fields
-        for field in ['content', 'kind']:
+        for field in ['content']:
             if field in node:
                 normalized[field] = node[field]
                 

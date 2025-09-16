@@ -114,7 +114,11 @@ If expiry empties a container that is marked removable, that container MUST also
 Root (`^root`) and region containers (`^sys`, `^seq`, `^ah`) MUST NOT be removed.
 
 ### 4.3 Reference Safety
-Nodes with live references MUST NOT be removed (expired or pruned). If liveness cannot be determined, implementations MUST preserve such nodes conservatively and MAY defer expiry across commits to satisfy this requirement.
+Reference Safety (normative position)
+
+Normative: PACT intentionally remains silent about application-level policies for pruning, garbage collection, expiry, retention, or any lifecycle policy that removes or archives nodes from a runtime. PACT specifies structural invariants, addressing, ordering, offsets, and snapshot/commit semantics — it does not prescribe, require, or prohibit any node deletion or retention strategies. Implementations and applications are free to adopt their own retention, pruning, or archival policies; any such policies are outside the scope of this specification.
+
+Note (non-normative): Runtimes MAY provide helper APIs for consumers (for example, to inspect references or enumerate child nodes) as implementation conveniences. Such APIs are explicitly implementation-specific and non-normative and must not be interpreted as part of PACT's normative conformance expectations.
 
 ---
 
@@ -135,6 +139,8 @@ Given the same prior snapshots and the same set of non‑expired additions, the 
 
 ### 5.5 Edit Scope
 **Active Turn (`at`)** — the *temporal edit scope* of the current cycle.
+
+Normative: During the active turn (@t0 / ^ah), any node may be created, updated, moved, or deleted so long as the operation preserves the structural invariants defined elsewhere in this specification (ordering, offset rules, parent/child invariants, uniqueness constraints). Implementations MUST treat edits made during the active turn as mutating the working state; only at commit does the engine produce an immutable snapshot representation for history.
 
 - Begins at cycle start and ends at commit.  
 - All nodes created during the cycle (in `^ah` or other regions) are editable until sealing.  

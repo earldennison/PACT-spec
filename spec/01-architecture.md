@@ -17,7 +17,7 @@ History: the committed sequence of past episodes. Use `@t` to address time.
 All PACT implementations MUST maintain a single rooted tree of context components.
 
 ### 1.1 Root
-- **`^root`** — the root container (never pruned or expired).  
+- **`^root`** — the root container (cannot be removed).  
   All regions exist beneath it.
 
 ### 1.2 Regions (roots)
@@ -28,7 +28,7 @@ The root has three required children (regions):
   Nodes here commonly have `ttl=None`.
 
 - **`^seq` (alias) — Conversation Sequence (structural)**  
-  Structural region containing historical segments. History selection uses `@t…`; there is no mapping of history to depth.
+  Structural region containing historical segments. Within a snapshot, depth enumerates sealed turns in `^seq` (newest=1); time across snapshots is addressed using `@t…`.
 
 - **`^ah` (alias) — Active Head; equals `depth(0)`**  
   Structural anchor for the working set in the current cycle.
@@ -81,19 +81,19 @@ PACT defines **three canonical node types** for interoperability and selectors:
 
 - **`block` (Block)**  
   Leaf/content node: text, tool call, tool result, media, document, etc.  
-  Provider‑agnostic. Attributes commonly used for interoperability include `kind`, `key`, and `tag`.
+  Provider‑agnostic. Anchors supported for selection are `type`, `key`, and `tag`.
 
 ### 2.1 User‑Assigned Types (allowed and encouraged)
 Implementations and developers MAY define additional **user‑assigned node types** to express domain semantics.
 
 - **Namespace required** to avoid collisions, e.g.:
-  - `block:summary`, `block:sql_query`, `block:image_caption`, `custom:note`
+  - `summary`, `sql_query`, `image_caption`, `custom:note`
 - **Selectors**:
   - Broad match via `.block`
-  - Specific match via `[nodeType="block"][kind="summary"]` (or any user-defined value)
+  - Specific match via `[nodeType='summary']` (or via `.summary` anchor)
 - **Requirement**: The canonical mapping MUST remain available so cross‑implementation queries like `.block` still work.
 
-> PACT v0.1 has **no overlay primitive**. “Overlay‑like” annotations (summaries, corrections, redactions) are represented as `block` nodes (e.g., `nodeType="block", kind="summary"`) typically placed in **post‑context**.
+> PACT v0.1 has **no overlay primitive**. “Overlay‑like” annotations (summaries, corrections, redactions) are represented as user‑assigned types (e.g., `nodeType="summary"`) typically placed in **post‑context**.
 
 ---
 
@@ -112,7 +112,7 @@ Depth is a single, signed axis across regions and is purely structural:
 - `d = 0`  → Active Head (`^ah`)
 - `d ≥ 1`  → Structural positions under `^seq`
 
-Depth and any derivatives, aliases, or slices are purely structural. They MUST NEVER encode time.
+Depth and any derivatives, aliases, or slices are purely structural within a snapshot. Cross‑snapshot time addressing uses `@t…` and MUST NOT be conflated with depth.
 
 ### 3.3 Nested Placement Invariance
 Placement and ordering rules apply recursively in every container:
@@ -127,7 +127,7 @@ The following aliases are structural sugar over depth (also see 04 – Context Q
 
 - `^sys` ≡ `depth(-1)`
 - `^ah`  ≡ `depth(0)`
-- `^seq` — structural region for historical segments (no history↔depth mapping)
+- `^seq` — structural region enumerating sealed turns within the snapshot
 
 ### 3.5 Structural Equivalence (Normative)
 
@@ -164,13 +164,18 @@ Canonical sibling ordering is defined normatively in [02 – Invariants §4.3](0
 
 ## 5. Lifecycle Metadata (required fields)
 
+[See non-normative annex: Adopter extensions — `kind` historical examples]
+
+Non-normative: historical `kind` examples were moved to `adopter-extensions.md`. `kind` is not normative for v1; implementers MAY choose to use `kind` as an internal extension but conformance must not rely on it.
+
 Every node MUST carry at least:
 
 - `id` — opaque stable identifier (hash or UUID, impl‑defined)
-- `nodeType` — canonical or user‑assigned type (e.g., `block`, `block:summary`)
+- `nodeType` — canonical or user‑assigned type (e.g., `block`, `summary`)
+- `parent_id` — immediate parent’s id (null for roots)
 - `offset` — integer (relative placement)
 - `ttl` — `None | 0 | N` (cycles)
-- `priority` — integer (for pruning order)
+- `priority` — integer (implementation-defined policy value)
 - `cycle` — introducing commit’s cycle (for this node version)
 - `created_at_ns` — monotonic nanosecond timestamp
 - `created_at_iso` — ISO8601 timestamp (human‑readable)

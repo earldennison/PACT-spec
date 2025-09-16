@@ -26,10 +26,10 @@ Note: Cross‑region movement is observationally equivalent to remove+add, not a
 
 ### 2.4 Global Depth Axis (Normative)
 
-There is one global integer axis `depth = d ∈ ℤ` that addresses all top-level containers:
+There is one global integer axis `depth = d ∈ ℤ` that addresses all top-level containers (within a fixed snapshot):
 
 - `d = 0` → the Active Turn container (the in-progress turn)
-- `d ≥ 1` → historical turns in commit order; `d = 1` is the most recent committed turn, `d = 2` the one before it, etc.
+- `d ≥ 1` → sealed turns in commit order within the snapshot; `d = 1` is the most recent sealed turn in that snapshot, `d = 2` the one before it, etc.
 - `d = -1` → the System container (implementation-/provider-owned)
 - (Reserved) `d ≤ -2` → reserved for future system strata; MUST NOT be used by userland without explicit extension.
 
@@ -41,7 +41,7 @@ The symbols `^ah`, `^seq`, and `^sys` are **pure aliases** over `depth`:
 - `^seq` ≡ the set `{ depth(n) | n ≥ 1 }`
 - `^sys` ≡ `depth(-1)`
 
-These aliases are **syntactic sugar only**. They MUST NOT confer capabilities, mutability, or permissions different from their `depth(...)` equivalents.
+These aliases are **syntactic sugar only**. They MUST NOT confer capabilities, mutability, or permissions different from their `depth(...)` equivalents. Depth is structural; cross‑snapshot time addressing uses `@t…`.
 
 ### 2.6 Equivalence Law (Normative)
 
@@ -124,7 +124,6 @@ parent_id:
 | `created_at_ns`  | number   | MUST     | Immutable                                 | Monotonic timestamp |
 | `created_at_iso` | string   | MUST     | Immutable                                 | ISO8601 mirror of timestamp |
 | `creation_index` | number   | MUST     | Immutable                                 | Per-cycle tie-breaker |
-| `kind`           | string   | MAY      | Immutable                                 | e.g., `text`, `call`, `result`, `image` |
 | `content_hash`   | string   | MAY      | MAY change when content changes           | Excluded from ordering |
 | Custom `data_*`  | any      | MAY      | SHOULD remain stable per meaning          | Namespaced; see §3.5 |
 | Custom `content_*` | any    | MAY      | MAY change with content                   | Namespaced; see §3.5 |
@@ -136,12 +135,12 @@ Canonical classes:
 - `block` — Block
 
 ### 3.4 User-Assigned Types
-Implementations MAY define user types (e.g., `block:summary`). Selectors MUST still resolve these as `.block`.
+Implementations MAY define user types (e.g., `summary`). Selectors MUST still resolve these as `.block`.
 
 ### 3.5 Attribute Creation and Stability (Normative)
 - Source of truth: Selector attributes map to node headers. Implementations MUST populate all mandatory headers; optional headers MAY be omitted.
 - Namespacing: Custom attributes MUST be namespaced (e.g., `content_*`, `data_*`, `block:foo`) and MUST NOT collide with reserved names.
-- Types: Header types are stable: `offset` | `ttl` | `priority` | `cycle` | `created_at_ns` | `creation_index` are numeric; `id` | `nodeType` | `created_at_iso` | `kind` are strings. Custom attributes SHOULD use a single stable type across a node’s lifetime.
+- Types: Header types are stable: `offset` | `ttl` | `priority` | `cycle` | `created_at_ns` | `creation_index` are numeric; `id` | `nodeType` | `created_at_iso` are strings. Custom attributes SHOULD use a single stable type across a node’s lifetime.
 - Immutability: Creation-time headers MUST remain stable; only lifecycle fields (e.g., `ttl`) MAY change per §3 and §5.
 - Defaults and nulls: Missing optional attributes compare as `null` per Selectors §5.5; required headers MUST be present (non-null).
 - Serialization: Attributes MUST serialize canonically and deterministically; unknown attributes MUST NOT affect canonical ordering.
@@ -169,11 +168,11 @@ A segment (`seg`) with content-bearing nodes at negative and positive offsets, a
   "id": "seg:42",
   "nodeType": "seg",
   "children": [
-    { "id": "block:pre1",  "nodeType": "block", "offset": -1,   "kind": "text",   "content": "Contextual hint" },
+    { "id": "block:pre1",  "nodeType": "block", "offset": -1,   "content": "Contextual hint" },
     { "id": "cont:42",    "nodeType": "cont", "offset": 0,  "children": [
-      { "id": "block:u42", "nodeType": "block",                "kind": "text",   "content": "Hello" }
+      { "id": "block:u42", "nodeType": "block",                "content": "Hello" }
     ] },
-    { "id": "block:post1", "nodeType": "block", "offset": 1,    "kind": "result", "content": "status: ok" }
+    { "id": "block:post1", "nodeType": "block", "offset": 1,    "content": "status: ok" }
   ]
 }
 ```
@@ -253,7 +252,11 @@ Empty containers marked removable MUST also be removed. Root and region containe
 - Cascade: When all children of a removable container are expired or pruned, the container MUST be removed in the same commit.
 
 ### 5.4 Reference Safety
-Nodes with live references MUST NOT be removed (expired or pruned). If liveness cannot be determined, implementations MUST preserve such nodes conservatively and MAY defer expiry across commits to satisfy this requirement.
+Reference Safety (normative position)
+
+Normative: PACT intentionally remains silent about application-level policies for pruning, garbage collection, expiry, retention, or any lifecycle policy that removes or archives nodes from a runtime. PACT specifies structural invariants, addressing, ordering, offsets, and snapshot/commit semantics — it does not prescribe, require, or prohibit any node deletion or retention strategies. Implementations and applications are free to adopt their own retention, pruning, or archival policies; any such policies are outside the scope of this specification.
+
+Note (non-normative): Runtimes MAY provide helper APIs for consumers (for example, to inspect references or enumerate child nodes) as implementation conveniences. Such APIs are explicitly implementation-specific and non-normative and must not be interpreted as part of PACT's normative conformance expectations.
 
 ## 6. Sealing and Context States
 ### 6.1 Active Head
@@ -317,9 +320,9 @@ See Lifecycle §7 for Commit Sequence (Normative). A snapshot MUST serialize to 
 Selectors MUST support:
 - Roots: `^sys`, `^seq`, `^ah`, `^root`
 - Types: `.seg`, `.cont`, `.block`
-- IDs: `#<id>`
+- IDs: `{ id="…" }`
 - Predicates: `:pre`, `:core`, `:post`, `:first`, `:last`, `:nth(n)`
-- Attributes: `[offset] [ttl] [cad] [priority] [cycle] [nodeType] [kind]`
+- Attributes: `[offset] [ttl] [cad] [priority] [cycle] [nodeType]`
 - Structural hops: descendant (`A B`), child (`A > B`)
 
 ### 9.3 Diffs
@@ -393,14 +396,11 @@ Each `block` serializes to an object:
 ```json
 {
   "id": "block:u1",
-  "kind": "text",
   "content": "Hello!"
 }
 ```
 
 - id MUST be preserved for diffs.
-
-- kind SHOULD indicate the modality ("text", "call", "result", etc.).
 
 ### 12.6 Ordering
 
@@ -442,7 +442,7 @@ Given this example snapshot structure at `@t0`:
         "id": "sys-1",
         "nodeType": "^sys",
         "children": [
-          {"id": "block:sysA", "kind": "text", "offset": 0, "content": "You are a helpful assistant."}
+          {"id": "block:sysA", "offset": 0, "content": "You are a helpful assistant."}
         ]
       },
       {
@@ -453,14 +453,14 @@ Given this example snapshot structure at `@t0`:
             "id": "seg:1",
             "nodeType": "seg",
             "children": [
-              {"id": "block:u1", "kind": "text", "offset": 0, "content": "Hello"}
+              {"id": "block:u1", "offset": 0, "content": "Hello"}
             ]
           },
           {
             "id": "seg:2",
             "nodeType": "seg",
             "children": [
-              {"id": "block:a1", "kind": "text", "offset": 0, "content": "Hi! How can I help?"}
+              {"id": "block:a1", "offset": 0, "content": "Hi! How can I help?"}
             ]
           }
         ]
@@ -469,7 +469,7 @@ Given this example snapshot structure at `@t0`:
         "id": "ah-1",
         "nodeType": "^ah",
         "children": [
-          {"id": "block:u2", "kind": "text", "offset": 0, "content": "Summarize the above."}
+          {"id": "block:u2", "offset": 0, "content": "Summarize the above."}
         ]
       }
     ]
@@ -481,10 +481,10 @@ The provider thread serialization MUST be in this exact order (regions: `^sys` �
 
 ```json
 [
-  {"id": "block:sysA",  "kind": "text", "content": "You are a helpful assistant."},
-  {"id": "block:u1",    "kind": "text", "content": "Hello"},
-  {"id": "block:a1",    "kind": "text", "content": "Hi! How can I help?"},
-  {"id": "block:u2",    "kind": "text", "content": "Summarize the above."}
+  {"id": "block:sysA",  "content": "You are a helpful assistant."},
+  {"id": "block:u1",    "content": "Hello"},
+  {"id": "block:a1",    "content": "Hi! How can I help?"},
+  {"id": "block:u2",    "content": "Summarize the above."}
 ]
 ```
 
@@ -504,7 +504,7 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
         "id": "sys-2",
         "nodeType": "^sys",
         "children": [
-          {"id": "block:sysB",  "kind": "text", "offset": 0, "content": "System header B"}
+          {"id": "block:sysB",  "offset": 0, "content": "System header B"}
         ]
       },
       {
@@ -515,9 +515,9 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
             "id": "seg:10",
             "nodeType": "seg",
             "children": [
-              {"id": "block:pre1",     "kind": "text",   "offset": -1, "content": "Pre-context hint"},
-              {"id": "block:core1",  "kind": "text",   "offset": 0,  "content": "Hello with context"},
-              {"id": "block:post1",    "kind": "result", "offset": 1,  "content": "status: ok"}
+              {"id": "block:pre1",     "offset": -1, "content": "Pre-context hint"},
+              {"id": "block:core1",    "offset": 0,  "content": "Hello with context"},
+              {"id": "block:post1",    "offset": 1,  "content": "status: ok"}
             ]
           }
         ]
@@ -526,9 +526,9 @@ Given this example snapshot structure at `@t0` containing pre-context (offset < 
         "id": "ah-2",
         "nodeType": "^ah",
         "children": [
-          {"id": "block:pre2",   "kind": "text",   "offset": -1, "content": "AH pre"},
-          {"id": "block:core2",  "kind": "text",   "offset": 0,  "content": "Working..."},
-          {"id": "block:post2",  "kind": "text",   "offset": 1,  "content": "Interim note"}
+          {"id": "block:pre2",   "offset": -1, "content": "AH pre"},
+          {"id": "block:core2",  "offset": 0,  "content": "Working..."},
+          {"id": "block:post2",  "offset": 1,  "content": "Interim note"}
         ]
       }
     ]
@@ -540,13 +540,13 @@ The provider thread serialization MUST be in this exact order (regions: `^sys` �
 
 ```json
 [
-  {"id": "block:sysB",    "kind": "text",   "content": "System header B"},
-  {"id": "block:pre1",     "kind": "text",   "content": "Pre-context hint"},
-  {"id": "block:core1",   "kind": "text",   "content": "Hello with context"},
-  {"id": "block:post1",    "kind": "result", "content": "status: ok"},
-  {"id": "block:pre2",    "kind": "text",   "content": "AH pre"},
-  {"id": "block:core2",   "kind": "text",   "content": "Working..."},
-  {"id": "block:post2",   "kind": "text",   "content": "Interim note"}
+  {"id": "block:sysB",    "content": "System header B"},
+  {"id": "block:pre1",    "content": "Pre-context hint"},
+  {"id": "block:core1",   "content": "Hello with context"},
+  {"id": "block:post1",   "content": "status: ok"},
+  {"id": "block:pre2",    "content": "AH pre"},
+  {"id": "block:core2",   "content": "Working..."},
+  {"id": "block:post2",   "content": "Interim note"}
 ]
 ```
 

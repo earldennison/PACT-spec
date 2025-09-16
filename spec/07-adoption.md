@@ -2,16 +2,7 @@
 
 # 07 – Adoption and Compatibility
 
-### Annex — Budgeting Guidance (Non-Normative)
-Budgeting decides **when** to trigger pruning based on limits such as token count,
-node count, depth, or application heuristics. PACT does **not** standardize budgeting.
-When budgeting triggers pruning, conformant implementations MUST:
-- Apply TTL expiry first, then pruning.
-- Use canonical pruning order: **priority → age (`created_at_ns` asc) → id (lexicographic)**.
-- Preserve determinism: given identical inputs and policies, produce identical post-state and bytes.
-
-Examples of budgeting knobs (illustrative only): `max_tokens_per_region`, `max_nodes_per_turn`,
-`max_depth(^seq)`, `priority_bands`.
+ 
 
 ## 1. Purpose
 This section provides guidance on **adopting PACT**, ensuring compatibility across implementations,  
@@ -32,9 +23,8 @@ A minimal compliant PACT runtime MUST implement:
 ### 2.2 Incremental Layers
 Implementations MAY adopt features in layers:
 1. **Core structure** (tree + regions + turns).  
-2. **Lifecycle** (TTL, expiry, sealing).  
-3. **Optional pruning/compaction** (non-normative budgeting; pruning is optional for conformance).  
-4. **Selectors & diffs** (debugging, inspection).  
+2. **Lifecycle** (sealing).  
+3. **Selectors & diffs** (debugging, inspection).  
 
 Each layer adds determinism and observability without invalidating earlier layers.
 
@@ -46,7 +36,7 @@ Implementations MUST always expose canonical types (`seg`, `cont`, `block`),
 even if internal class names differ (e.g., `TextContextComponent` → `.block`).
 
 ### 3.2 User-Assigned Types
-Implementations MAY define user-assigned types (e.g., `block:summary`).  
+Implementations MAY define user-assigned types (e.g., `summary`).  
 These MUST remain queryable via canonical selectors (`.block`) and attributes.
 
 ### 3.3 Opaque IDs
@@ -85,12 +75,12 @@ Imported into PACT prior to commit:
 {
   "root": {"children": [
     {"id": "sys-1", "nodeType": "^sys", "children": [
-      {"id": "block:sysA", "nodeType": "block", "kind": "text", "offset": 0, "content": "You are helpful."}
+      {"id": "block:sysA", "nodeType": "block", "offset": 0, "content": "You are helpful."}
     ]},
     {"id": "ah-1", "nodeType": "^ah", "children": [
       {"id": "cont:1", "nodeType": "cont", "offset": 0, "children": [
-        {"id": "block:u1", "nodeType": "block", "kind": "text", "content": "Hello"},
-        {"id": "block:a1", "nodeType": "block", "kind": "text", "content": "Hi!"}
+        {"id": "block:u1", "nodeType": "block", "content": "Hello"},
+        {"id": "block:a1", "nodeType": "block", "content": "Hi!"}
       ]}
     ]}
   ]}
@@ -101,7 +91,7 @@ At commit, `^ah` is sealed into `^seq` as a new `seg`.
 
 ### 4.2 RAG and External Stores
 External retrieval-augmented memory MAY insert items as `block` nodes.  
-These nodes MUST respect TTL, pruning, and canonical ordering.
+These nodes MUST respect canonical ordering.
 
 Example (RAG insert with TTL):
 
@@ -109,7 +99,6 @@ Example (RAG insert with TTL):
 {
   "id": "block:rag1",
   "nodeType": "block",
-  "kind": "text",
   "content": "Doc: How to reset a password...",
   "ttl": 2,
   "offset": 1
@@ -118,7 +107,7 @@ Example (RAG insert with TTL):
 
 Placement guidance:
 - Attach RAG `block` under the relevant turn’s post‑context (`offset > 0`) or into `^ah` during the current cycle.
-- Use `ttl` to expire retrievals deterministically; pruning SHALL follow priority → age → id.
+ 
 
 ---
 

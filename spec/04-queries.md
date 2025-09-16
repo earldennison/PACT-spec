@@ -16,7 +16,8 @@ Queries MUST be deterministic and side-effect free.
 
 ## 2. Query Model
 ### 2.1 Input
-- A selector string (PACT query syntax).  
+- A selector or selector_list string (PACT query syntax).  
+- Alternatively, an API array of selectors: `selectors: string[]` (MUST produce identical ordering and dedup semantics as grammar union).  
 - An optional snapshot reference (`@t0`, `@t-1`, `@c42`).  
 
 ### 2.2 Output
@@ -53,22 +54,15 @@ Canonical order for selectors:
 - `.cont` — Container  
 - `.block` — Block  
 
-Type Sugar (Normative):
-- Input sugar: `.Base:TypeName` ≡ `[nodeType='TypeName']`
-  - Examples: `.cont:Message` ⇒ `[nodeType='Message']`; `.block:DiffChunk` ⇒ `[nodeType='DiffChunk']`
-- Input without sugar: `.cont` ⇒ `[nodeType='cont']`, `.block` ⇒ `[nodeType='block']`, etc.
-- Output normalization MUST expand sugar to attributes and MUST NOT emit `.Base:TypeName`.
-
-Kind is not targeted by this sugar:
-- `kind` is optional metadata and MUST be addressed explicitly with attributes. This specification does not use `kind` in examples.
-- `.block:summary` is invalid as a `kind` shorthand and MUST be treated as TYPE sugar; reject unless `summary` is a real node type per parser policy (see Parser Behavior).
+Type Anchors (Normative):
+- `.TypeName` ≡ `[nodeType='TypeName']`
+- Output normalization MUST expand `.TypeName` to `[nodeType='TypeName']`.
 
 Parser Behavior (Normative options):
-- If the colon suffix token resolves to a known type in the engine’s registry, parse as `nodeType`.
+- If the `.TypeName` token resolves to a known type in the engine’s registry, parse as `nodeType`.
 - If unknown and no dynamic type system is present, either:
   - treat as a parse error; or
   - accept optimistically as `[nodeType='<token>']` per implementation policy.
-- Engines MUST NOT silently reinterpret `:<token>` as `kind`.
 
 ### 3.3 Keys and IDs
 - `#<key>` — shorthand for `{ key="…" }` (NEVER id)
@@ -89,13 +83,13 @@ Offset-based predicates map to canonical offset semantics defined in [02 – Inv
 Region Aliases (Normative, pure sugar):
 - `^sys` ≡ `depth(-1)` (structural)
 - `^ah`  ≡ `depth(0)`  (structural)
-- `^seq` — structural region for historical segments (no temporal equivalence; use `@t…` for history)
+- `^seq` — structural region enumerating sealed turns within the snapshot; cross‑snapshot history is addressed via `@t…`
 
 Deprecated Depth Qualifier (input-only translation): see above.
 
 Examples (canonical forms):
 - `depth(0) > .cont[offset=0]`            # active head core container
-- `@t0 .seg > .block#summary`             # last committed segment’s summary (temporal)
+- `@t0 .seg > .summary`                    # last committed segment’s summary (temporal)
 - `@t-1 .seg`                             # an older segment (temporal)
 - `depth(-1) > .block#policy`             # system container child (if authorized)
 
@@ -103,11 +97,11 @@ Where an alias appears, structural depth forms MUST be accepted as identical inp
 - `^ah > .cont[offset=0]` ≡ `depth(0) > .cont[offset=0]`
 - `^sys > *` ≡ `depth(-1) > *`
 
-Attribute filters remain unchanged and MAY be combined with depth predicates: `[key]`, `[type]`, `[tag]`, etc. Overlap note: `[key="K"]` MAY return multiple matches; use ordering or additional filters to choose the newest instance.
+Attribute filters remain unchanged and MAY be combined with depth predicates: `[key]`, `[nodeType]`, `[tag]`, etc. Overlap note: `[key="K"]` MAY return multiple matches; use ordering or additional filters to choose the newest instance.
 
 ### 3.5 Attributes
 Selectors MUST support attributes:  
-`[offset] [ttl] [cad] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id] [kind]`
+`[offset] [ttl] [cad] [priority] [cycle] [created_at_ns] [created_at_iso] [nodeType] [id]`
 
 #### 3.5.1 Grouped Shorthand (Normative)
 In addition to `[attr]` filters, implementations MUST support a grouped shorthand form using parentheses immediately after a type token. Example:
@@ -120,9 +114,8 @@ is semantically identical to:
 ```
 Attributes inside `(...)` are separated by space or comma. This is purely syntactic sugar; engines MUST normalize grouped forms to canonical bracket filters before evaluation.
 
-Normalization Rules (Type vs Kind):
-- Canonical output MUST expand `.Base:TypeName` to `[nodeType='TypeName']`.
-- Canonical output MUST NOT emit `.Base:<…>` for `kind`.
+Normalization Rules:
+- Canonical output MUST expand `.TypeName` to `[nodeType='TypeName']`.
 
 Parentheses immediately following a type token are reserved for this shorthand and MUST NOT collide with predicates; predicates continue to use the `:` prefix (e.g., `:first`).
 
@@ -230,9 +223,9 @@ ctx.select("@t0 ( .seg .cont > .block ) { status='ok' }")
 → ["block:a1", "block:a7", ...]
 
 # Range (RangeDiffLatestResult)
-ctx.select("@t-3..@t0 ^seq .seg .block[kind='summary']")
+ctx.select("@t-3..@t0 ^seq .seg .summary")
 → {
-     "query": "@t-3..@t0 .seg .block",
+     "query": "@t-3..@t0 .seg .summary",
      "snapshots": [ { "label":"@t0" }, { "label":"@t-1" }, { "label":"@t-2" }, { "label":"@t-3" } ],
      "diffs": [
        { "from":{"label":"@t0"}, "to":{"label":"@t-1"}, "added_ids":[], "removed_ids":["block:sum:c101"], "changed":[] },
@@ -248,17 +241,15 @@ ctx.select("@t-3..@t0 ^seq .seg .block[kind='summary']")
 ## 4. Grammar (EBNF)
 
 ```
-selector        := temporal_opt selector_body attributes_opt behavior_opt controls_opt ;
+selector        := temporal_opt search_or_position attributes_opt behavior_opt controls_opt ;
 temporal_opt    := /* WS if omitted => @t0 */ | "@t" rel | "@t" rel ".." "@t" rel | "@history" ;
 rel             := "0" | ("-" uint) | ("+" uint) ;
 
-selector_body   := coordinate
-                 | coordinate_set
-                 | chain_selector
-                 | prop_search ;
-
-coordinate      := "(" "d" int ("," int )* ")" ;            # (dK, o1, o2, ...)
-coordinate_set  := "(" coordinate ("," coordinate)* ")" ;   # ((d1,0),(d2,0,1))
+/* Coordinate productions (Normative) */
+coordinate         := "d" signed_int ( "," signed_int )* ;
+position           := "(" coordinate ( "," coordinate )* ")" ;
+coordinate_set     := position ;   # coordinate_set is a position containing one or more coordinates
+signed_int         := ('+' | '-')? digit+ ;
 
 chain_selector  := scope_opt? selector_chain ;
 scope_opt       := "d" int ( ".." int )? ;                   # optional depth scope (d1 or d1..d8)
@@ -287,7 +278,15 @@ int             := ("-"|"+")? uint ;
 uint            := DIGIT { DIGIT } ;
 quoted          := "'" { ANY_BUT_SINGLE_QUOTE | "\\'" } "'"
                  | '"' { ANY_BUT_DOUBLE_QUOTE | '\\"' } '"' ;
+
+selector_list        := selector (',' selector)* ;
+parenthesized_selector := '(' selector ')' ;
+search_or_position   := position | chain_selector | prop_search | parenthesized_selector ;
+position             := coordinate | coordinate_set ;
 ```
+
+Note: commas inside a parenthesized position separate coordinates. For v1, top-level commas outside parenthesized positions are reserved for selector unions and require explicit grouping.
+
 
 ### 4.3 Deletions (remove these productions entirely)
 
@@ -304,6 +303,16 @@ quoted          := "'" { ANY_BUT_SINGLE_QUOTE | "\\'" } "'"
 - **behavior**: `[ ... ]` = behavior/lifecycle (e.g., `ttl`, `cad`, `ephemeral`, `sticky`).
 - **controls**: `@...` = controls, allow vendor passthrough via `@*`.
 - **time**: Default time lens is `@t0` when omitted.
+
+### 5.1 Union & Grouping (Normative)
+
+Parenthesized fragments required in unions (Normative):
+When composing selector unions that include coordinate or otherwise complex fragments, each fragment MUST be parenthesized. Example: ((d1,-1,0) > .scaf), ((d3,1) > .me). Parsers MUST reject ambiguous, unparenthesized forms with error `E_SELECTOR_AMBIGUOUS`.
+
+Selector-list evaluation & deduplication (Normative):
+- A selector_list `S1, S2, ..., Sn` is evaluated left-to-right.
+- The final result is the concatenation of each selector's result in that order.
+- Implementations MUST deduplicate nodes by stable identifier. If a node appears in multiple selectors, it MUST appear only once in the final result at the first-seen position (first selector that matched it).
 
 ---
 
@@ -332,25 +341,25 @@ Given this minimal snapshot fixture at `@t0`:
   "root": {
     "children": [
       { "id": "sys-1", "nodeType": "^sys", "children": [
-        { "id": "block:sysA", "nodeType": "block", "kind": "text", "offset": 0, "content": "S" }
+        { "id": "block:sysA", "nodeType": "block", "offset": 0, "content": "S" }
       ]},
       { "id": "seq-1", "nodeType": "^seq", "children": [
         { "id": "seg:1", "nodeType": "seg", "children": [
           { "id": "cont:1", "nodeType": "cont", "children": [
-            { "id": "block:u1", "nodeType": "block", "kind": "text", "offset": 0, "ttl": 2, "content": "U1" }
+            { "id": "block:u1", "nodeType": "block", "offset": 0, "ttl": 2, "content": "U1" }
           ]},
           { "id": "cont:2", "nodeType": "cont", "children": [
-            { "id": "block:a1", "nodeType": "block", "kind": "text", "offset": 0, "ttl": 1, "content": "A1" }
+            { "id": "block:a1", "nodeType": "block", "offset": 0, "ttl": 1, "content": "A1" }
           ]}
         ]},
         { "id": "seg:2", "nodeType": "seg", "children": [
           { "id": "cont:3", "nodeType": "cont", "children": [
-            { "id": "block:u2", "nodeType": "block", "kind": "text", "offset": 0, "content": "U2" }
+            { "id": "block:u2", "nodeType": "block", "offset": 0, "content": "U2" }
           ]}
         ]}
       ]},
       { "id": "ah-1", "nodeType": "^ah", "children": [
-        { "id": "block:u3", "nodeType": "block", "kind": "text", "offset": 0, "content": "U3" }
+        { "id": "block:u3", "nodeType": "block", "offset": 0, "content": "U3" }
       ]}
     ]
   }
@@ -360,10 +369,9 @@ Given this minimal snapshot fixture at `@t0`:
 Implementations MUST produce exactly these results (IDs and order):
 
 1. `@t0 ^sys .block` → `["block:sysA"]`
-2. `@t0 .seg` → `["seg:1"]`
-3. `@t0 .seg` and `@t-1 .seg` (evaluated separately) → `["seg:1"]`, `["seg:2"]`
-4. `@t0 .seg .cont > .block` → `["cont:1","cont:2"]`
-5. `@t0 #block:u2` → `["block:u2"]`
+2. `@t0 .seg` → `["seg:1","seg:2"]`
+3. `@t0 .seg .cont > .block` → `["block:u1","block:a1"]`
+4. `@t0 { id="block:u2" }` → `["block:u2"]`
 
 ## 6.3 Additional Range Fixture (Normative)
 
@@ -375,9 +383,9 @@ To validate range depth selectors, the following minimal snapshot fixture at `@t
   "root": {
     "children": [
       { "id": "seq-2", "nodeType": "^seq", "children": [
-        { "id": "seg:1", "nodeType": "seg", "children": [ { "id": "cont:1", "nodeType": "cont", "children": [ { "id": "block:u1", "nodeType": "block", "kind": "text", "offset": 0, "content": "U1" } ] } },
-        { "id": "seg:2", "nodeType": "seg", "children": [ { "id": "cont:2", "nodeType": "cont", "children": [ { "id": "block:u2", "nodeType": "block", "kind": "text", "offset": 0, "content": "U2" } ] } },
-        { "id": "seg:3", "nodeType": "seg", "children": [ { "id": "cont:3", "nodeType": "cont", "children": [ { "id": "block:u3", "nodeType": "block", "kind": "text", "offset": 0, "content": "U3" } ] } }
+        { "id": "seg:1", "nodeType": "seg", "children": [ { "id": "cont:1", "nodeType": "cont", "children": [ { "id": "block:u1", "nodeType": "block", "offset": 0, "content": "U1" } ] } },
+        { "id": "seg:2", "nodeType": "seg", "children": [ { "id": "cont:2", "nodeType": "cont", "children": [ { "id": "block:u2", "nodeType": "block", "offset": 0, "content": "U2" } ] } },
+        { "id": "seg:3", "nodeType": "seg", "children": [ { "id": "cont:3", "nodeType": "cont", "children": [ { "id": "block:u3", "nodeType": "block", "offset": 0, "content": "U3" } ] } }
       ]}
     ]
   }
@@ -388,54 +396,160 @@ To validate range depth selectors, the following minimal snapshot fixture at `@t
   Expect: per-snapshot IDs in canonical order; cross-snapshot recency is expressed by the `@t…` prefix.
 
 
+## 6.4 Union & Grouping Tests (Normative)
+
+Positive tests:
+
+1. `((d1,0) > .scaf), ((d2,0) > .me)` → two result sets concatenated in order.
+2. `(d1,0)` → returns the node at coordinate.
+3. `((d1,0) > .item), ((d1,0) > .item)` → returns `.item` nodes once (dedup), position as per first selector.
+
+Negative tests:
+
+4. `d1, d2` → parse error (no grouping).
+5. `(d1,0) > .scaf, d2` → parse error / ambiguous (requires grouping).
+6. `.a, .b` → valid (comma union for non-coordinate selectors).
+7. `(d1,0,1) , (d1,0,2)` → valid; two positions unioned — ensure commas inside position vs top-level clarified by parentheses.
+
+Edge tests:
+
+8. Large `selector_list` with many fragments — ensure timeouts/limits enforced by runner.
+9. Dedup behavior: node X present in both selector1 and selector2 → appears once at its first-seen position.
+10. Ordering: ensure left-to-right concatenation is preserved.
+
+## 7. Implementation Notes & Limits (Non‑Normative, except where noted)
+
+- Parser: Add `selector_list` and treat parentheses as grouping. Use a two-pass tokenizer: detect balanced parentheses; classify commas as inside a position vs top-level (union). For v1, reject ambiguous forms; require grouping.
+
+- Executor: Run each selector independently in declared order. Collect results in an array; dedupe by stable `id`; respect per-selector canonical ordering.
+
+- Optimization: For many fragments that select coordinates, detect overlaps and coalesce queries server-side to avoid repeated traversals. For large unions, support streaming results with per-fragment pagination.
+
+- Limits (RECOMMENDED): Runtimes SHOULD enforce a maximum number of fragments per `selector_list` (e.g., 100). When exceeded, return an error (e.g., `E_SELECTOR_TOO_MANY_FRAGMENTS`). `@limit` applies to results, not fragment count.
+
+- API design (RECOMMENDED): Support both the grammar union (comma-separated) and an API-level array input: `selectors: ["(d1,-1,0) > .scaf", "(d3,1) > .me"]`. Both MUST produce identical ordering and dedup semantics.
+
+- Treat-as-block wish (v1 guidance): Prefer explicit filters: `(d1,-1,0) { nodeType="block" }`.
+
 ## 8. Canonical Coordinates
 
 * Define coordinate precisely: `(dK, offset₁, offset₂, …)` with `d0` = active head, `d1` = latest sealed, `d-1` = system.
 * Offsets are integers; `0` is the core child within a turn (`mc`).
 * Coordinates are unique within a snapshot; across episodes, depth indices re-derive.
 
-## 9. Examples (replace with minimal, compliant set)
+## 9. Canonical examples (minimal, canonical)
+- ((d1,-1,0) > .scaf)
+- ((d1,-1,0) > .scaf), ((d3,1) > .me)
+- (d1,-1,0) { nodeType="block" }                  # explicit block filter
+- .summary .note { author="assistant" } @limit=10
+- { nodeType="summary", author="user" }
+- @history d1..d5 .log.entry { severity="P1" } [ ttl>=1 ] @order=path @limit=20
 
-Examples use the chained selector syntax (dot-chains and `>` for child-of). Coordinates and property-search forms are also shown.
-
-- `@t0 (d1,0,1)` — exact coordinate
-- `@t0 ((d1,0), (d2,0,1))` — coordinate set
-- `@t0 d1..d3 .summary` — summaries in depths 1–3
-- `.mc > .container > .section > .cta { variant in ["primary","ghost"] }`
-- `.summary .note { author="assistant" } @limit=10`
-- `#nav .item`
-- `+audit .summary [ ttl>=2 ] @limit=50`
-- `(d2,0) .note { lang="en" }`
-- `{ nodeType="block", type="summary", author="user" }`
-- `d0 .config { key="theme" }`
-- `@history d1..d5 .log.entry { severity="P1" } [ ttl>=1 ] @order=path @limit=20`
-
-## Migration Recipe
-
-### Regex replace (git-run friendly examples)
-
-```text
-s/\.block:([A-Za-z0-9_]+)/.\1/g   # `.block:summary` → `.summary`
-s/cont\[offset=([0-9-]+)\]/\1/g    # `cont[offset=0]` → `0`
-s/c@([0-9]+)/ (\1)/g                # best-effort cleanup for c@→ coordinate form (manual verify)
-s/\*\@[\+\-]/[use-offset-filter]/g # remove \*@+/- occurrences; replace with offset filters
-```
-
-### Linter rules
-
-- Flag any `cont[...]`, `c@`, `.block:...`, `*@+/-` uses as errors.
-- Auto-fix `.block:TYPE` → `.TYPE`.
-- Auto-fix `cont[offset=N]` → `N` inside coordinates/paths.
-
-Add note: run migration branch + tests; update examples and unit tests.
+### Linter rules (v1: flag-only)
+- [See non-normative annex: Adopter extensions — `kind` historical examples]
+- Rationale: v1 is a WIP. Editors should remove legacy tokens manually to avoid accidental semantic changes. Linter reports MUST use error code `E_SELECTOR_LEGACY`.
 
 ## 10. Conformance & Validation
 
 - Parentheses parse only to coordinate or coordinate set (unless explicitly using `chain_selector`).
-- `.TYPE` anchors must map to nodes whose `type==TYPE`.
+- `.TYPE` anchors must map to nodes whose `nodeType==TYPE`.
 - If `ttl`/`cad` are found in `{...}`, validator MUST recommend moving them to `[...]`.
 - Any removed legacy tokens cause a validation error.
 - Validation: any occurrence of the token "CSS" or explicit DOM/CSS comparisons in headings/subheadings should be flagged and removed; authors must use neutral phrasing such as "chained selector syntax" or "selector chains".
 
-[← 03-lifecycle-ttl](03-lifecycle-ttl.md) | [↑ Spec Index](../README.md) | [→ 05-snapshots](05-snapshots.md)
+See §5.1 "Selectors / Semantics" for the normative rule.
 
+## 11. Selector & Placement Error Model
+
+Error codes, HTTP mapping, and JSON shape:
+
+Error codes & HTTP mapping
+
+INVALID_SELECTOR → 400 Bad Request
+
+INVALID_PLACEMENT → 400 Bad Request
+
+DUPLICATE_CONTAINER → 409 Conflict
+
+NOT_AUTHORIZED → 403 Forbidden
+
+PARENT_ID_MISSING → 422 Unprocessable Entity
+
+CONFLICTING_UPDATE → 409 Conflict
+
+INTERNAL_ERROR → 500 Internal Server Error
+
+Canonical JSON error body (use this shape for all errors):
+```json
+{
+"error": {
+"code": "INVALID_SELECTOR",
+"message": "Short human message about the error.",
+"details": { "field": "selector", "pos": 7, "token": "?" }
+}
+}
+```
+
+### Examples
+
+Invalid selector grammar
+
+Request: ctx.select("(d1..")
+
+Response (400 / INVALID_SELECTOR):
+```json
+{
+"error": {
+"code":"INVALID_SELECTOR",
+"message":"Selector grammar invalid at position 4",
+"details":{"pos":4,"token":".."}
+}
+}
+```
+
+Duplicate container offset attempted
+
+Request: create a second cont[offset=0] in the same parent
+
+Response (409 / DUPLICATE_CONTAINER):
+```json
+{
+"error": {
+"code":"DUPLICATE_CONTAINER",
+"message":"Parent already contains a container at offset=0",
+"details":{"parent_id":"p-123","offset":0}
+}
+}
+```
+
+Parent required but missing
+
+Request: create node without parent_id where required
+
+Response (422 / PARENT_ID_MISSING):
+```json
+{
+"error": {
+"code":"PARENT_ID_MISSING",
+"message":"parent_id is required for non-root nodes",
+"details":{"node_temp_id":"tmp-7"}
+}
+}
+```
+
+Conflicting update (optimistic concurrency)
+
+Response (409 / CONFLICTING_UPDATE):
+```json
+{
+"error": {
+"code":"CONFLICTING_UPDATE",
+"message":"Concurrent update detected; include base_snapshot_id to retry",
+"details":{"expected_snapshot":"snap-42","found_snapshot":"snap-43"}
+}
+}
+```
+
+Normative: adopt this error model as normative for all selector and placement failures; runtimes may add vendor-specific meta under `details` but MUST keep `code`, `message`, and `details` keys.
+
+[← 03-lifecycle-ttl](03-lifecycle-ttl.md) | [↑ Spec Index](../README.md) | [→ 05-snapshots](05-snapshots.md)
