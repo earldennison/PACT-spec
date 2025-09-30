@@ -192,9 +192,9 @@ Components have sophisticated lifetime management:
 
 ### CSS-like Selector Language
 Query context structure with familiar syntax:
-- `^ah .content` - All content in active region
-- `^seq .tool_result` - Tool results in conversation history
-- `@t-3..@t-1 .content` - Content from 3 turns ago to 1 turn ago
+- `.content` - All content in active region
+- `.tool_result` - Tool results in conversation history
+- `@t-3..@t-1` - Content from 3 turns ago to 1 turn ago
 - `.component[ttl=3]` - All components with 3-turn TTL
 
 ### Immutable Snapshots
