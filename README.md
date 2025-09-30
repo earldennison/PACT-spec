@@ -49,7 +49,7 @@ PACT enables a new class of components called "scaffolds" - stateful functions t
 
 This transforms agents from "request-response processors" into systems with **persistent, evolving state** - like giving them an operating system for memory and capability management.
 
-### PACT's Solution: Context Operating System
+### PACT's Solution: Context as a Virtual DOM
 PACT provides **operating system-level services for AI context**, treating conversation state as a programmable, managed resource:
 
 **Virtual DOM for Conversations:**
