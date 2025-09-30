@@ -154,7 +154,7 @@ Tool execution and component updates happen against a stable, predictable struct
 - **Union Queries**: Combine multiple selection criteria for complex filtering
 
 ### Universal Provider Compatibility
-One PACT tree works identically across all providers:
+One PACT tree works identically across all providers (With a translation mechanism):
 - OpenAI (GPT-4, GPT-5)
 - Anthropic (Claude)
 - Local models (Llama, Mistral)
